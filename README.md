@@ -3,3 +3,5 @@ Hi guys! We are using GitHub to help us collaborate in writing our R codes for t
 Remember to always keep our main branch clean and functioning.
 
 Just trying whether collaborators have access to the branches.
+
+Checking whether anyone can force push to the master branch.
