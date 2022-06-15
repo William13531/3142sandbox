@@ -13,11 +13,11 @@ library("zoo")
 data <- read.csv("ACTL31425110AssignmentData2022.csv", na.strings=c("", "NA"), header=TRUE)
 dim(data) # Consists of 1,226,044 rows and 13 columns
 
-# First recorded date of claiming
-first_claim_date = min(data$accident_month)
+# The date the first recorded month ended
+first_month_ended = min(data$accident_month)
 
-# Last recorded date of claiming
-last_claim_date = max(data$accident_month)
+# The date the last recorded month ended
+last_month_ended = max(data$accident_month)
 
 # List of all unique policy ids
 policy_ids = sort(unique(data$policy_id))
@@ -59,24 +59,24 @@ claims_by_postcode = claims_by_postcode[order(-claims_by_postcode$AvgPaidPerCarM
 data['quarter_in_year'] <- as.yearqtr(data$accident_month, format="%Y-%m-%d")
 
 # Consider all cars, including those without any claims.
-claims_by_quarters <- data %>%
+data_by_quarters <- data %>%
   group_by(quarter_in_year) %>%
   summarise(total_car_month = n(),
             total_paid = sum(total_claims_cost, na.rm=TRUE),
             avg_paid_per_car = 3*total_paid/total_car_month)
 
 # Consider only claims with positive total_claims_cost
-actual_claims_by_quarters <- data %>%
+claims_by_quarters <- data %>%
   filter(total_claims_cost > 0) %>%
   group_by(quarter_in_year) %>%
   summarise(total_claims = n(),
             avg_paid_per_claim = sum(total_claims_cost)/total_claims)
 
 # Merge two tables
-claims_by_quarters <- merge(claims_by_quarters, actual_claims_by_quarters, by="quarter_in_year")
+claims_by_quarters <- merge(data_by_quarters, claims_by_quarters, by="quarter_in_year")
 
 # Model claim frequency with the average number of claims for a car in a quarter
-claims_by_quarters["claims_per_car"] <- c(claims_by_quarters$total_claims/claims_by_quarters$total_car_month)
+claims_by_quarters["claims_per_car"] <- c(claims_by_quarters$total_claims/data_by_quarters$total_car_month)
 
 ggplot(data=claims_by_quarters, aes(x=quarter_in_year, y=avg_paid_per_car)) +
   geom_bar(stat="identity", width=0.17) +
