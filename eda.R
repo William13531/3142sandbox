@@ -79,23 +79,29 @@ claims_by_quarters <- merge(data_by_quarters, claims_by_quarters, by="quarter_in
 claims_by_quarters["claims_per_car"] <- c(claims_by_quarters$total_claims/data_by_quarters$total_car_month)
 
 ggplot(data=claims_by_quarters, aes(x=quarter_in_year, y=avg_paid_per_car)) +
-  geom_bar(stat="identity", width=0.17) +
+  geom_bar(stat="identity", width=0.17, color="blue", fill = "white") +
   ggtitle("Quarterly Average Paid per Car from 2016Q3 to 2021Q2") +
   theme(plot.title = element_text(hjust = 0.5)) +
-  labs(y="Average paid per car", x="Quarter in Year")
+  labs(y="Average paid per car", x="Quarter in Year") +
+  geom_line(size = 1.5, color="red", group = 1) +
+  geom_smooth(method = "lm")
 
 # Average claim size
 ggplot(data=claims_by_quarters, aes(x=quarter_in_year, y=avg_paid_per_claim)) +
-  geom_bar(stat="identity", width=0.17) +
+  geom_bar(stat="identity", width=0.17, color="blue", fill = "white") +
   ggtitle("Quarterly Average Claim Size from 2016Q3 to 2021Q2") +
   theme(plot.title = element_text(hjust = 0.5)) +
-  labs(y="Average Claim Size in AU$", x="Quarter in Year")
+  labs(y="Average Claim Size in AU$", x="Quarter in Year") +
+  geom_line(size = 1.5, color="red", group = 1) +
+  geom_smooth(method = "lm")
 
 # Average claim frequency
 ggplot(data=claims_by_quarters, aes(x=quarter_in_year, y=claims_per_car)) +
-  geom_bar(stat="identity", width=0.17) +
+  geom_bar(stat="identity", width=0.17, color="blue", fill = "white") +
   ggtitle("Quarterly Average Claims Frequency from 2016Q3 to 2021Q2") +
   theme(plot.title = element_text(hjust = 0.5)) +
-  labs(y="Average Claims Frequency", x="Quarter in Year")
+  labs(y="Average Claims Frequency", x="Quarter in Year") +
+  geom_line(size = 1.5, color="red", group = 1) +
+  geom_smooth(method = "lm")
 
 # Work on log changes
