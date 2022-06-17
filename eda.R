@@ -11,8 +11,18 @@ used_time <- as.numeric(accident_year) - data$year_of_manufacture
 data <- data.frame(data,used_time)
 View(data)
 
+#remove claims exceed the insured
+upper <- data$sum_insured
+data_no_extra <- subset(data, data$total_claims_cost <= upper & 
+                          data$total_claims_cost >= 0 | is.na(claim_loss_date))
+
+#remove error
+data_no_false <- subset(data_no_extra, used_time >= 0)
+
+clean_data <- data_no_false
+
 #group by state to compare the claim costs and frequency in different states
-data_by_state <- data %>%
+data_by_state <- clean_data %>%
   group_by(risk_state_name) %>%
   summarise(avg_used_time = mean(used_time),
             avg_claims = mean(total_claims_cost,na.rm=TRUE),
@@ -38,7 +48,7 @@ ggplot(data=data_by_state, aes(x=risk_state_name,y=avg_sum_insured)) +
   labs(y="Average Insured", x="State", title="Average Insured by State")
 
 #group by vehicle classes
-data_by_class <- data %>%
+data_by_class <- clean_data %>%
   group_by(vehicle_class) %>%
   summarise(avg_used_time = mean(used_time),
             avg_claims = mean(total_claims_cost,na.rm=TRUE),
