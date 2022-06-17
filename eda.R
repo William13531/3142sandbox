@@ -9,11 +9,13 @@ library(tidyselect)
 library(ggplot2)
 library(tidyverse)
 library("zoo")
+library("ozmaps")
+library(sf)
 
 # -----------------------------------------------------------------------------
 
 # Helper functions
-specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k)))
 
 # -----------------------------------------------------------------------------
 
@@ -90,8 +92,8 @@ claims_by_quarters["avg_claim_frequency"] <- c(claims_by_quarters$total_claims/d
 
 # Plot average paid for each car in a quarter
 ggplot(data=claims_by_quarters) +
-  geom_point(aes(x=quarter_in_year, y=avg_claim_size), size = 1.5, color="red", group = 1) +
-  geom_smooth(aes(x=quarter_in_year, y=avg_claim_size), method = "lm") +
+  geom_point(aes(x=quarter_in_year, y=avg_paid_per_car), size = 1.5, color="red", group = 1) +
+  geom_smooth(aes(x=quarter_in_year, y=avg_paid_per_car), method = "lm") +
   ggtitle("Quarterly Average Paid per Car from 2016Q3 to 2021Q2") +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y="Average paid per car", x="Quarter in Year")
@@ -99,7 +101,7 @@ ggplot(data=claims_by_quarters) +
 # Plot average claim size in a quarter
 ggplot(data=claims_by_quarters) +
   geom_point(aes(x=quarter_in_year, y=avg_claim_size), size = 1.5, color="red", group = 1) +
-  geom_smooth(aes(x=quarter_in_year, y=avg_claim_size), method = "lm") +
+  geom_smooth(aes(x=quarter_in_year, y=avg_claim_size), method = "gam") +
   ggtitle("Quarterly Average Claim Size from 2016Q3 to 2021Q2") +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y="Average Claim Size in AU$", x="Quarter in Year")
@@ -107,7 +109,7 @@ ggplot(data=claims_by_quarters) +
 # Plot average claim frequency for a car in a quarter
 ggplot(data=claims_by_quarters) +
   geom_point(aes(x=quarter_in_year, y=avg_claim_frequency), size = 1.5, color="red", group = 1) +
-  geom_smooth(aes(x=quarter_in_year, y=avg_claim_frequency), method = "lm") +
+  geom_smooth(aes(x=quarter_in_year, y=avg_claim_frequency), method = "gam") +
   ggtitle("Quarterly Average Claims Frequency from 2016Q3 to 2021Q2") +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y="Average Claims Frequency", x="Quarter in Year", color = "Legend")
@@ -115,7 +117,7 @@ ggplot(data=claims_by_quarters) +
 # Plot average claim severity for each quarter
 ggplot(data=claims_by_quarters) +
   geom_point(aes(x=quarter_in_year, y=avg_claim_severity), size = 1.5, color="red", group = 1) +
-  geom_smooth(aes(x=quarter_in_year, y=avg_claim_severity), method = "lm") +
+  geom_smooth(aes(x=quarter_in_year, y=avg_claim_severity), method = "gam") +
   ggtitle("Quarterly Average Claim Severity from 2016Q3 to 2021Q2") +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y="Average Claim Severity", x="Quarter in Year", color = "Legend")
@@ -129,11 +131,31 @@ data_by_state <- data %>%
             avg_claims = mean(total_claims_cost,na.rm=TRUE),
             avg_sum_insured = mean(sum_insured))
 
+claims_by_state <- data %>%
+  group_by(risk_state_name) %>%
+  filter(total_claims_cost >= 0) %>%
+  summarise(no_of_claims = n())
+
+data_by_state = merge(data_by_state, claims_by_state, by="risk_state_name")
+
+# Plot a Australian map with number of claims represented by colours for each state
+ozmap()
+sf_oz <- ozmap_data("states")
+ggplot(data = sf_oz) + geom_sf()
+
+cases <- c(874,1756,683,1293,2726,105,2,14,0)
+sf_oz$cases <- cases
+ggplot(data = sf_oz, aes(fill = cases)) + 
+  geom_sf() +
+  labs(title="Number of Claims by States from 16Q3 to 21Q2") +
+  scale_fill_gradient(low ="lightblue", high = "purple") +
+  theme(plot.title = element_text(hjust = 0.5))
+
 # Plot total claim costs by states
 ggplot(na.omit(data)) +
   geom_boxplot(aes(x = risk_state_name , y = total_claims_cost)) +
   coord_cartesian(ylim = c(0, 10000)) +
-  labs(y="Total Claims Cost in AU$", x="State", title="Claims Cost per Car by State") +
+  labs(y="Total Claims Cost in AU$", x="State", title="Total Claims Cost by State") +
   theme(plot.title = element_text(hjust = 0.5))
 
 # Plot average claim cost by states
@@ -152,16 +174,50 @@ ggplot(data=data_by_state, aes(x=risk_state_name,y=avg_sum_insured)) +
 
 # EDA 3: Investigate claim data by car age
 
+data_by_car_age <- data %>%
+  group_by(car_age) %>%
+  summarise(avg_claim_cost = mean(total_claims_cost, na.rm=TRUE),
+            avg_sum_insured = mean(sum_insured),
+            count_insured = n())
 
+claims_by_car_age <- data %>%
+  group_by(car_age) %>%
+  filter(total_claims_cost >= 0) %>%
+  summarise(no_of_claims = n())
+
+data_by_car_age = merge(data_by_car_age, claims_by_car_age, by="car_age")
+data_by_car_age["avg_claim_frequency"] = c(data_by_car_age$no_of_claims/data_by_car_age$count_insured)
+
+ggplot(data_by_car_age) +
+  geom_bar(aes(x=car_age,y=count_insured), stat="identity",width=0.5) +
+  geom_smooth(aes(x=car_age,y=count_insured), method="gam") +
+  labs(y="Number of Cars Insured", x="Car Age", title="Number of Cars Insured by Age") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data_by_car_age) +
+  geom_bar(aes(x=car_age,y=no_of_claims), stat="identity",width=0.5) +
+  geom_smooth(aes(x=car_age,y=no_of_claims), method="gam") +
+  labs(y="Number of Claims", x="Car Age", title="Number of Claims by Age") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(data_by_car_age) +
+  geom_bar(aes(x=car_age,y=avg_claim_frequency), stat="identity",width=0.5) +
+  geom_smooth(aes(x=car_age,y=avg_claim_frequency), method="gam") +
+  labs(y="Average Claim Frequency", x="Car Age", title="Average Claim Frequency by Car Age") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 30)
+
+ggplot(data_by_car_age) +
+  geom_bar(aes(x=car_age,y=avg_claim_cost), stat="identity",width=0.5) +
+  geom_smooth(aes(x=car_age,y=avg_claim_cost), method="gam") +
+  labs(y="Average Claim Cost", x="Car Age", title="Average Claim Cost by Car Age") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlim(0, 30)
 
 # -----------------------------------------------------------------------------
 
 # EDA: Investigate claim data by postcodes (William)
-# As there are not enough data for every postcode for us to arrive at 
-# a reasonable conclusion, I have decided to focus on claim data per LGA
-# in Sydney and Melbourne.
-# https://postcodez.com.au/postcodes/nsw/sydney
-# Want to create a map of Sydney LGAs with colors representing claim behaviors.
+# Insufficient data
 
 claims_by_postcode <- data %>%
   group_by(risk_postcode) %>%
@@ -172,5 +228,3 @@ claims_by_postcode <- data %>%
             AvgSumInsured = mean(sum_insured))
 
 claims_by_postcode = claims_by_postcode[order(-claims_by_postcode$AvgPaidPerCarMonth, -claims_by_postcode$TotalPaid), ]
-
-# total_claim_cost / sum_insured
