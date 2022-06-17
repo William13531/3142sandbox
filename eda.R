@@ -153,19 +153,19 @@ ggplot(data = sf_oz, aes(fill = cases)) +
 
 # Plot total claim costs by states
 ggplot(na.omit(data)) +
-  geom_boxplot(aes(x = risk_state_name , y = total_claims_cost)) +
+  geom_boxplot(aes(x = risk_state_name, y = total_claims_cost)) +
   coord_cartesian(ylim = c(0, 10000)) +
   labs(y="Total Claims Cost in AU$", x="State", title="Total Claims Cost by State") +
   theme(plot.title = element_text(hjust = 0.5))
 
 # Plot average claim cost by states
-ggplot(data=data_by_state, aes(x=risk_state_name,y=avg_claims)) +
+ggplot(data=data_by_state, aes(x=risk_state_name, y = avg_claims)) +
   geom_bar(stat="identity",width=0.5) +
-  labs(y="Average Claim Cost in AU$", x="State", title="Average Claim Cost per Car by State") +
+  labs(y="Average Claim Cost in AU$", x="State", title="Average Claim Size by State") +
   theme(plot.title = element_text(hjust = 0.5))
 
 # Plot average sum insured by states
-ggplot(data=data_by_state, aes(x=risk_state_name,y=avg_sum_insured)) +
+ggplot(data=data_by_state, aes(x=risk_state_name, y = avg_sum_insured)) +
   geom_bar(stat="identity",width=0.5) +
   labs(y="Average Sum Insured in AU$", x="State", title="Average Sum Insured per Car by State") +
   theme(plot.title = element_text(hjust = 0.5))
@@ -191,13 +191,13 @@ data_by_car_age["avg_claim_frequency"] = c(data_by_car_age$no_of_claims/data_by_
 ggplot(data_by_car_age) +
   geom_bar(aes(x=car_age,y=count_insured), stat="identity",width=0.5) +
   geom_smooth(aes(x=car_age,y=count_insured), method="gam") +
-  labs(y="Number of Cars Insured", x="Car Age", title="Number of Cars Insured by Age") +
+  labs(y="Number of Cars Insured", x="Car Age", title="Number of Cars Insured by Car Age") +
   theme(plot.title = element_text(hjust = 0.5))
 
 ggplot(data_by_car_age) +
   geom_bar(aes(x=car_age,y=no_of_claims), stat="identity",width=0.5) +
   geom_smooth(aes(x=car_age,y=no_of_claims), method="gam") +
-  labs(y="Number of Claims", x="Car Age", title="Number of Claims by Age") +
+  labs(y="Number of Claims", x="Car Age", title="Number of Claims by Car Age") +
   theme(plot.title = element_text(hjust = 0.5))
 
 ggplot(data_by_car_age) +
