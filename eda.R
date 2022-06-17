@@ -1,5 +1,7 @@
 library(dplyr)
 library(ggplot2)
+library(ozmaps)
+library(sf)
 
 data <- read.csv("3142 Assignment Data.csv")
 View(data)
@@ -46,6 +48,19 @@ ggplot(data=data_by_state, aes(x=risk_state_name,y=avg_claims)) +
 ggplot(data=data_by_state, aes(x=risk_state_name,y=avg_sum_insured)) +
   geom_bar(stat="identity",width=0.5) +
   labs(y="Average Insured", x="State", title="Average Insured by State")
+
+#plotting map of AU
+ozmap()
+sf_oz <- ozmap_data("states")
+ggplot(data = sf_oz) + geom_sf()
+
+cases <- c(874,1756,683,1293,2726,105,2,14,0)
+sf_oz$cases <- cases
+ggplot(data = sf_oz, aes(fill = cases)) + 
+  geom_sf() +
+  labs(title="claim frequency by states") +
+  scale_fill_gradient(low ="lightblue", high = "purple")
+
 
 #group by vehicle classes
 data_by_class <- clean_data %>%
