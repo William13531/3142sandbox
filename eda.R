@@ -18,7 +18,6 @@ dim(data) # Consists of 1,226,044 rows and 13 columns
 data <- data %>%
   # remove entries where total_claims_cost is greater than the sum_insured
   filter((total_claims_cost <= sum_insured) | is.na(total_claims_cost))
-  #filter(!(total_claims_cost > 0) & (is.na(claim_loss_date)))
 
 # The date the first recorded month ended
 first_month_ended = min(data$accident_month)
@@ -85,6 +84,7 @@ claims_by_quarters <- merge(data_by_quarters, claims_by_quarters, by="quarter_in
 # Model claim frequency with the average number of claims for a car in a quarter
 claims_by_quarters["claims_per_car"] <- c(claims_by_quarters$total_claims/data_by_quarters$total_car_month)
 
+# Average paid for each car in a quarter
 ggplot(data=claims_by_quarters) +
   geom_point(aes(x=quarter_in_year, y=avg_paid_per_car), size = 1.5, color="red", group = 1) +
   geom_smooth(aes(x=quarter_in_year, y=avg_paid_per_car), method = "lm") +
@@ -92,7 +92,7 @@ ggplot(data=claims_by_quarters) +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y="Average paid per car", x="Quarter in Year")
 
-# Average claim size
+# Average claim size in a quarter
 ggplot(data=claims_by_quarters) +
   geom_point(aes(x=quarter_in_year, y=avg_paid_per_claim), size = 1.5, color="red", group = 1) +
   geom_smooth(aes(x=quarter_in_year, y=avg_paid_per_claim), method = "lm") +
@@ -100,7 +100,7 @@ ggplot(data=claims_by_quarters) +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y="Average Claim Size in AU$", x="Quarter in Year")
 
-# Average claim frequency
+# Average claim frequency for a car in a quarter
 ggplot(data=claims_by_quarters) +
   geom_point(aes(x=quarter_in_year, y=claims_per_car), size = 1.5, color="red", group = 1) +
   geom_smooth(aes(x=quarter_in_year, y=claims_per_car), method = "lm") +
