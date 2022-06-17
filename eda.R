@@ -11,7 +11,14 @@ library(tidyverse)
 library("zoo")
 
 data <- read.csv("ACTL31425110AssignmentData2022.csv", na.strings=c("", "NA"), header=TRUE)
+colnames(data)[1] <- 'accident_month'
 dim(data) # Consists of 1,226,044 rows and 13 columns
+
+# Data cleaning
+data <- data %>%
+  # remove entries where total_claims_cost is greater than the sum_insured
+  filter((total_claims_cost <= sum_insured) | is.na(total_claims_cost))
+  #filter(!(total_claims_cost > 0) & (is.na(claim_loss_date)))
 
 # The date the first recorded month ended
 first_month_ended = min(data$accident_month)
@@ -102,3 +109,5 @@ ggplot(data=claims_by_quarters) +
   labs(y="Average Claims Frequency", x="Quarter in Year", color = "Legend")
 
 # Work on log changes
+
+# total_claim_cost / sum_insured
