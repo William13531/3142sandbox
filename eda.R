@@ -11,10 +11,12 @@ library(tidyverse)
 library("zoo")
 library("ozmaps")
 library(sf)
+library("praise")
 
 # -----------------------------------------------------------------------------
 
 # Helper functions
+replicate(5, praise())
 specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k)))
 
 # -----------------------------------------------------------------------------
