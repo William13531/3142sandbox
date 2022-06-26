@@ -103,5 +103,5 @@ claims_by_months["avg_claim_frequency"] <- c(claims_by_months$total_claims/(12*d
 
 claims_by_months = merge(claims_by_months, m1_data, by="month_in_year", all.x=TRUE)
 
-claims_by_months['m1_change'] = c(NA, diff(log(claims_by_months$"M1"), lag=1))
-claims_by_months['avg_claim_size_change'] = c(NA, diff(log(claims_by_months$"avg_claim_size"), lag = 1))
+claims_by_months['m1_change'] = c(0, diff(log(claims_by_months$"M1"), lag=1))
+claims_by_months['avg_claim_size_change'] = c(0, diff(log(claims_by_months$"avg_claim_size"), lag = 1))
