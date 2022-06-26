@@ -11,6 +11,7 @@ library(tidyverse)
 library("zoo")
 library("ozmaps")
 library(sf)
+library(mgcv)
 
 # -----------------------------------------------------------------------------
 
@@ -23,9 +24,9 @@ specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k
 
 data <- read.csv("ACTL31425110AssignmentData2022.csv", na.strings=c("", "NA"), header=TRUE)
 # Added a column to include the quarter of the year for each record.
-data['quarter_in_year'] <- as.yearqtr(data$accident_month, format="%Y-%m-%d")
+data['quarter_in_year'] <- as.yearqtr(data$嚜瘸ccident_month, format="%Y-%m-%d")
 # Added a column to include the age of the car
-data['car_age'] <- as.numeric(format(as.Date(data$accident_month),format="%Y")) - data$year_of_manufacture
+data['car_age'] <- as.numeric(format(as.Date(data$嚜瘸ccident_month),format="%Y")) - data$year_of_manufacture
 dim(data) # Consists of 1,226,044 rows and 13 columns
 
 # -----------------------------------------------------------------------------
@@ -41,10 +42,10 @@ data <- data %>%
 # Some basic explorations of data
 
 # The date the first recorded month ended
-first_month_ended = min(data$accident_month)
+first_month_ended = min(data$嚜瘸ccident_month)
 
 # The date the last recorded month ended
-last_month_ended = max(data$accident_month)
+last_month_ended = max(data$嚜瘸ccident_month)
 
 # List of all unique policy ids
 policy_ids = sort(unique(data$policy_id))
@@ -228,3 +229,31 @@ claims_by_postcode <- data %>%
             AvgSumInsured = mean(sum_insured))
 
 claims_by_postcode = claims_by_postcode[order(-claims_by_postcode$AvgPaidPerCarMonth, -claims_by_postcode$TotalPaid), ]
+
+#------------------------------------------------------------------------------
+
+# Milestone 2 
+# Claim frequency
+
+# Import and modify data
+automotive_fuel_price_movements <- read.csv("Automotive fuel quarterly movement.csv")
+automotive_fuel_price_movements$嚜熹uarter <- as.yearqtr(automotive_fuel_price_movements$嚜熹uarter)
+
+GDP <- read.csv("Gross domestic product.csv")
+GDP$嚜熹uarter <- as.yearqtr(GDP$嚜熹uarter)
+
+claim_frequency <- merge(data_by_quarters, claims_by_quarters, by="quarter_in_year")
+claim_frequency["claim_frequency"] <- c(claim_frequency$total_claims/claim_frequency$total_car_month)
+claim_frequency["automotive_fuel_price_change"] <- automotive_fuel_price_movements$qtr.change
+claim_frequency["GDP_change"] <- GDP$Quarterly.growth....
+
+# Regression
+hist(claim_frequency$claim_frequency) #check for normal distribution
+plot(claim_frequency$claim_frequency ~ claim_frequency$automotive_fuel_price_change) #check for linearity
+cor(claim_frequency$automotive_fuel_price_change, claim_frequency$GDP_change) #check for correlation
+
+claim_frequency_lm <- glm(claim_frequency$claim_frequency ~ claim_frequency$automotive_fuel_price_change + claim_frequency$GDP_change)
+summary(claim_frequency_lm)
+
+par(mfrow=c(2,2))
+plot(claim_frequency_lm)
