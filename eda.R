@@ -257,3 +257,5 @@ summary(claim_frequency_lm)
 
 par(mfrow=c(2,2))
 plot(claim_frequency_lm)
+
+pair(~ claim_frequency)
