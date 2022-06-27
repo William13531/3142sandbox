@@ -29,7 +29,9 @@ specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k
 # Import and modify data here
 
 claim_data <- read.csv("ACTL31425110AssignmentData2022.csv", na.strings=c("", "NA"), header=TRUE)
-m1_data <- read.csv("m1monthly.csv")
+#m1_monthly_data <- read.csv("m1monthly.csv")
+m1_qtrly_data <- read.csv("m1qtrly.csv")
+cpi_qtrly_data <- read.csv("qtrlycpi.csv")
 # Added a column to include the quarter of the year for each record.
 claim_data['quarter_in_year'] <- as.yearqtr(claim_data$accident_month, format="%Y-%m-%d")
 # Added another column to include the month of the year for each record.
@@ -37,9 +39,12 @@ claim_data['month_in_year'] <- as.yearmon(claim_data$accident_month, format="%Y-
 # Added a column to include the age of the car
 claim_data['car_age'] <- as.numeric(format(as.Date(claim_data$accident_month),format="%Y")) - claim_data$year_of_manufacture
 
-m1_data['month_in_year'] <- as.yearmon(m1_data$DATE, format="%Y-%m-%d")
-m1_data = subset(m1_data, select=-c(DATE))
-m1_data <- m1_data %>% rename(M1 = MANMM101AUM189S)
+m1_qtrly_data['quarter_in_year'] <- as.yearqtr(m1_qtrly_data$DATE, format="%Y-%m-%d")
+m1_qtrly_data = subset(m1_qtrly_data, select=-c(DATE))
+m1_qtrly_data <- m1_qtrly_data %>% rename(M1 = MANMM101AUM189S)
+
+cpi_qtrly_data['quarter_in_year'] <- as.yearqtr(cpi_qtrly_data$Time, format="%b-%y")
+cpi_qtrly_data = subset(cpi_qtrly_data, select=-c(Time))
 
 # -----------------------------------------------------------------------------
 
@@ -76,32 +81,23 @@ claims_by_quarters <- merge(data_by_quarters, claims_by_quarters, by="quarter_in
 # Model claim frequency with the average number of claims for a car in a quarter
 claims_by_quarters["avg_claim_frequency"] <- c(claims_by_quarters$total_claims/(4*data_by_quarters$total_exposure))
 
-# -----------------------------------------------------------------------------
+claims_by_quarters = merge(claims_by_quarters, m1_qtrly_data, by="quarter_in_year", all.x=TRUE)
 
-# Data by months
+claims_by_quarters['m1_change'] = c(0, diff(log(claims_by_quarters$"M1"), lag=1))
+claims_by_quarters['avg_claim_size_change'] = c(0, diff(log(claims_by_quarters$"avg_claim_size"), lag = 1))
 
-data_by_months <- claim_data %>%
-  group_by(month_in_year) %>%
-  summarise(total_exposure = sum(exposure),
-            total_paid = sum(total_claims_cost, na.rm=TRUE),
-            avg_paid_per_car = specify_decimal(total_paid/(12*total_exposure), 1))
+claims_by_quarters <- merge(claims_by_quarters, cpi_qtrly_data, by="quarter_in_year")
 
-claims_by_months <- claim_data %>%
-  filter(total_claims_cost > 0) %>%
-  group_by(month_in_year) %>%
-  summarise(total_claims = n(),
-            # Model claim size by the average claim size
-            avg_claim_size = sum(total_claims_cost)/total_claims,
-            # Model severity of claim as a % of sum insured
-            avg_claim_severity = sum(total_claims_cost)/sum(sum_insured))
+claims_by_quarters.glm <- glm(avg_claim_size~PriceIndex+M1, weights=total_exposure, family=Gamma, data=claims_by_quarters)
+print(summary(claims_by_quarters.glm,corr=T))
+print(anova(claims_by_quarters.glm, test="Chi"))
+par(mfrow=c(2,2))
+plot(claims_by_quarters.glm)
 
-# Merge two tables
-claims_by_months <- merge(data_by_months, claims_by_months, by="month_in_year")
-
-# Model claim frequency with the average number of claims for a car in a month
-claims_by_months["avg_claim_frequency"] <- c(claims_by_months$total_claims/(12*data_by_months$total_exposure))
-
-claims_by_months = merge(claims_by_months, m1_data, by="month_in_year", all.x=TRUE)
-
-claims_by_months['m1_change'] = c(0, diff(log(claims_by_months$"M1"), lag=1))
-claims_by_months['avg_claim_size_change'] = c(0, diff(log(claims_by_months$"avg_claim_size"), lag = 1))
+# analysis of residuals
+plot(avg_claim_size, fitted(claims_by_quarters.glm), xlab="observed amounts", ylab="fitted values",main="Observed vs Predicted",pch=20)
+abline(0,1)
+plot(fitted(claims_by_quarters.glm), resid(claims_by_quarters.glm,type="deviance"), xlab="fitted values",ylab="deviance residuals", main="Fitted vs Residuals",pch=20)
+abline(0,0)
+qqnorm(resid(claims_by_quarters.glm, type="pearson"),xlab="quantiles of Std Normal",ylab="Pearson residuals",pch=20)
+qqline(resid(claims_by_quarters.glm))
