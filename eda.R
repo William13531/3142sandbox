@@ -244,18 +244,29 @@ GDP$嚜熹uarter <- as.yearqtr(GDP$嚜熹uarter)
 
 claim_frequency <- merge(data_by_quarters, claims_by_quarters, by="quarter_in_year")
 claim_frequency["claim_frequency"] <- c(claim_frequency$total_claims/claim_frequency$total_car_month)
-claim_frequency["automotive_fuel_price_change"] <- automotive_fuel_price_movements$qtr.change
-claim_frequency["GDP_change"] <- GDP$Quarterly.growth....
+claim_frequency["automotive_fuel_price"] <- automotive_fuel_price_movements$Index
+claim_frequency["GDP"] <- GDP$Index
 
 # Regression
-hist(claim_frequency$claim_frequency) #check for normal distribution
-plot(claim_frequency$claim_frequency ~ claim_frequency$automotive_fuel_price_change) #check for linearity
-cor(claim_frequency$automotive_fuel_price_change, claim_frequency$GDP_change) #check for correlation
+# Check for normal distribution
+par(mfrow=c(1,1))
+hist(claim_frequency$claim_frequency) 
+hist(claim_frequency$total_claims)
 
-claim_frequency_lm <- glm(claim_frequency$claim_frequency ~ claim_frequency$automotive_fuel_price_change + claim_frequency$GDP_change)
+# Check for linearity
+plot(claim_frequency$claim_frequency ~ claim_frequency$automotive_fuel_price)
+plot(claim_frequency$total_claims ~ claim_frequency$automotive_fuel_price)
+
+# Check for correlation
+cor(claim_frequency$automotive_fuel_price, claim_frequency$GDP) 
+
+claim_frequency_lm <- glm(formula = claim_frequency$claim_frequency ~ claim_frequency$automotive_fuel_price + claim_frequency$GDP, family = "binomial")
 summary(claim_frequency_lm)
 
-par(mfrow=c(2,2))
-plot(claim_frequency_lm)
+claim_frequency_glm <- glm(formula = total_claims ~ automotive_fuel_price + GDP, family = poisson, data = claim_frequency)
+summary(claim_frequency_glm)
+print(anova(claim_frequency_glm, test="Chi"))
 
-pair(~ claim_frequency)
+par(mfrow=c(2,2))
+plot(claim_frequency_glm)
+
