@@ -69,7 +69,7 @@ claim_size_train_data <- claim_size_data[split==0, ]
 claim_size_test_data <- claim_size_data[split==1, ]
 
 #claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, data=claim_size_train_data, family=gaussian(link="log"))
-claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+GDP+M1+policy_tenure, data=claim_size_train_data, family=Gamma(link="inverse"))
+claim_size.glm = glm(total_claims_cost ~ price_index+car_age+policy_tenure+fuel_price_index, data=claim_size_train_data, family=Gamma(link="inverse"))
 # remove FXRTWI?
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
@@ -108,6 +108,7 @@ plot(claim_size.predict, claim_size_test_data$total_claims_cost)
 
 claim_size_test_data["predicted_claims_cost"] = claim_size.predict
 
+# by quarter
 claim_size_test_by_quarters <- claim_size_test_data %>%
   group_by(quarter_in_year) %>%
   summarise(total_claims = n(),
@@ -121,6 +122,21 @@ cor(claim_size_test_by_quarters$actual_avg_claim_cost, claim_size_test_by_quarte
 
 plot(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$actual_avg_claim_cost, type="l", col="red")
 lines(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$predicted_avg_claim_cost, col="blue")
+
+# by month
+claim_size_test_by_months <- claim_size_test_data %>%
+  group_by(month_in_year) %>%
+  summarise(total_claims = n(),
+            actual_avg_claim_cost = mean(total_claims_cost), 
+            predicted_avg_claim_cost = mean(predicted_claims_cost),
+            percent_error = abs((actual_avg_claim_cost-predicted_avg_claim_cost)/actual_avg_claim_cost))
+
+show(claim_size_test_by_months)
+mean(claim_size_test_by_months$percent_error)
+cor(claim_size_test_by_months$actual_avg_claim_cost, claim_size_test_by_months$predicted_avg_claim_cost)
+
+plot(claim_size_test_by_months$month_in_year, claim_size_test_by_months$actual_avg_claim_cost, type="l", col="red")
+lines(claim_size_test_by_months$month_in_year, claim_size_test_by_months$predicted_avg_claim_cost, col="blue")
 
 # -----------------------------------------------------------------------------
 
