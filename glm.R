@@ -54,7 +54,7 @@ claim_data <- merge(claim_data, gdp_qtrly_data, by="quarter_in_year", all.x=TRUE
 
 # -----------------------------------------------------------------------------
 
-# We model claim size first.
+# We first model the claim size with the Gamma distribution.
 claim_size_data = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0)
 
 # Randomly allocate 70% of data into the training set and 30% of the data into the testing set
@@ -68,8 +68,9 @@ for (num in random_split) {
 claim_size_train_data <- claim_size_data[split==0, ]
 claim_size_test_data <- claim_size_data[split==1, ]
 
-# claim_size.glm = glm(data=claim_size_train_data, total_claims_cost ~ car_age+M1+sum_insured, family=gaussian(link="identity"))
-claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, data=claim_size_train_data, family=gaussian(link="log"))
+#claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, data=claim_size_train_data, family=gaussian(link="log"))
+claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+GDP+M1+policy_tenure, data=claim_size_train_data, family=Gamma(link="inverse"))
+# remove FXRTWI?
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
 par(mfrow=c(2,2))
@@ -85,14 +86,14 @@ qqnorm(resid(claim_size.glm,type="pearson"),xlab="quantiles of Std Normal",ylab=
 qqline(resid(claim_size.glm))
 
 # predicting total_claims_cost for the test set
-claim_size.predict <- exp(predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
+claim_size.predict <- 1/(predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
                                                                  car_age = claim_size_test_data$car_age, 
                                                                  M1 = claim_size_test_data$M1, 
+                                                                 GDP = claim_size_test_data$GDP,
+                                                                 policy_tenure = claim_size_test_data$policy_tenure,
                                                                  FXRTWI = claim_size_test_data$FXRTWI,
                                                                  fuel_price_index = claim_size_test_data$fuel_price_index,
-                                                                 sum_insured = claim_size_test_data$sum_insured, 
-                                                                 policy_tenure = claim_size_test_data$policy_tenure, 
-                                                                 vehicle_class = claim_size_test_data$vehicle_class)))
+                                                                 sum_insured = claim_size_test_data$sum_insured)))
 #print(claim_size.predict)
 
 summary(claim_size_test_data$total_claims_cost)
@@ -123,3 +124,4 @@ lines(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$p
 
 # -----------------------------------------------------------------------------
 
+# We then model claim frequency with a GLM with the Poisson distribution.
