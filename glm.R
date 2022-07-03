@@ -18,8 +18,11 @@ specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k
 
 claim_data <- read.csv("ACTL31425110AssignmentData2022.csv", na.strings=c("", "NA"), header=TRUE)
 m1_mthly_data <- read.csv("m1mthly.csv")
-#m1_qtrly_data <- read.csv("m1qtrly.csv")
 cpi_qtrly_data <- read.csv("qtrlycpi.csv")
+exchange_rate_mthly_data <- read.csv("exchange_rate.csv")
+fuel_qtrly_data <- read.csv("fuel.csv")
+gdp_qtrly_data <- read.csv("gdp.csv")
+
 # Added a column to include the quarter of the year for each record.
 claim_data['quarter_in_year'] <- as.yearqtr(claim_data$accident_month, format="%Y-%m-%d")
 # Added another column to include the month of the year for each record.
@@ -34,8 +37,20 @@ m1_mthly_data <- m1_mthly_data %>% rename(M1 = MANMM101AUM189S)
 cpi_qtrly_data['quarter_in_year'] <- as.yearqtr(cpi_qtrly_data$Time, format="%b-%y")
 cpi_qtrly_data = subset(cpi_qtrly_data, select=-c(Time,quarterly_change,yearly_change))
 
+exchange_rate_mthly_data['month_in_year'] <- as.yearmon(exchange_rate_mthly_data$Series.ID, format="%d-%b-%y")
+exchange_rate_mthly_data = subset(exchange_rate_mthly_data, select=c(month_in_year, FXRTWI)) # consider jpy, euro?
+
+fuel_qtrly_data['quarter_in_year'] <- as.yearqtr(fuel_qtrly_data$time, format="%Y Q%q")
+fuel_qtrly_data = subset(fuel_qtrly_data, select=c(quarter_in_year, fuel_price_index))
+
+gdp_qtrly_data['quarter_in_year'] <- as.yearqtr(gdp_qtrly_data$Time, format="%b-%y")
+gdp_qtrly_data = subset(gdp_qtrly_data, select=-c(Time, Quarterly_GDP_Growth))
+
 claim_data <- merge(claim_data, cpi_qtrly_data, by="quarter_in_year", all.x=TRUE)
 claim_data <- merge(claim_data, m1_mthly_data, by="month_in_year", all.x=TRUE)
+claim_data <- merge(claim_data, exchange_rate_mthly_data, by="month_in_year", all.x=TRUE)
+claim_data <- merge(claim_data, fuel_qtrly_data, by="quarter_in_year", all.x=TRUE)
+claim_data <- merge(claim_data, gdp_qtrly_data, by="quarter_in_year", all.x=TRUE)
 
 # -----------------------------------------------------------------------------
 
@@ -53,7 +68,8 @@ for (num in random_split) {
 claim_size_train_data <- claim_size_data[split==0, ]
 claim_size_test_data <- claim_size_data[split==1, ]
 
-claim_size.glm = glm(data=claim_size_train_data, total_claims_cost ~ car_age+M1+sum_insured, family=gaussian(link="identity"))
+# claim_size.glm = glm(data=claim_size_train_data, total_claims_cost ~ car_age+M1+sum_insured, family=gaussian(link="identity"))
+claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, data=claim_size_train_data, family=gaussian(link="log"))
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
 par(mfrow=c(2,2))
@@ -69,9 +85,15 @@ qqnorm(resid(claim_size.glm,type="pearson"),xlab="quantiles of Std Normal",ylab=
 qqline(resid(claim_size.glm))
 
 # predicting total_claims_cost for the test set
-claim_size.predict <- predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
-  car_age = claim_size_test_data$car_age, M1 = claim_size_test_data$M1, sum_insured = claim_size_test_data$sum_insured))
-print(claim_size.predict)
+claim_size.predict <- exp(predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
+                                                                 car_age = claim_size_test_data$car_age, 
+                                                                 M1 = claim_size_test_data$M1, 
+                                                                 FXRTWI = claim_size_test_data$FXRTWI,
+                                                                 fuel_price_index = claim_size_test_data$fuel_price_index,
+                                                                 sum_insured = claim_size_test_data$sum_insured, 
+                                                                 policy_tenure = claim_size_test_data$policy_tenure, 
+                                                                 vehicle_class = claim_size_test_data$vehicle_class)))
+#print(claim_size.predict)
 
 summary(claim_size_test_data$total_claims_cost)
 summary(claim_size.predict)
@@ -81,6 +103,23 @@ MSE = mean((claim_size_test_data$total_claims_cost-claim_size.predict)^2)
 print(MSE)
 RMSE = sqrt(MSE)
 print(RMSE)
+plot(claim_size.predict, claim_size_test_data$total_claims_cost)
+
+claim_size_test_data["predicted_claims_cost"] = claim_size.predict
+
+claim_size_test_by_quarters <- claim_size_test_data %>%
+  group_by(quarter_in_year) %>%
+  summarise(total_claims = n(),
+            actual_avg_claim_cost = mean(total_claims_cost), 
+            predicted_avg_claim_cost = mean(predicted_claims_cost),
+            percent_error = abs((actual_avg_claim_cost-predicted_avg_claim_cost)/actual_avg_claim_cost))
+
+show(claim_size_test_by_quarters)
+mean(claim_size_test_by_quarters$percent_error)
+cor(claim_size_test_by_quarters$actual_avg_claim_cost, claim_size_test_by_quarters$predicted_avg_claim_cost)
+
+plot(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$actual_avg_claim_cost, type="l", col="red")
+lines(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$predicted_avg_claim_cost, col="blue")
 
 # -----------------------------------------------------------------------------
 
