@@ -38,7 +38,7 @@ cpi_qtrly_data['quarter_in_year'] <- as.yearqtr(cpi_qtrly_data$Time, format="%b-
 cpi_qtrly_data = subset(cpi_qtrly_data, select=-c(Time,quarterly_change,yearly_change))
 
 exchange_rate_mthly_data['month_in_year'] <- as.yearmon(exchange_rate_mthly_data$Series.ID, format="%d-%b-%y")
-exchange_rate_mthly_data = subset(exchange_rate_mthly_data, select=c(month_in_year, FXRTWI)) # consider jpy, euro?
+exchange_rate_mthly_data = subset(exchange_rate_mthly_data, select=c(month_in_year, FXRTWI, FXRJY, FXREUR)) # consider jpy, euro?
 
 fuel_qtrly_data['quarter_in_year'] <- as.yearqtr(fuel_qtrly_data$time, format="%Y Q%q")
 fuel_qtrly_data = subset(fuel_qtrly_data, select=c(quarter_in_year, fuel_price_index))
@@ -70,6 +70,9 @@ claim_size_test_data <- claim_size_data[split==1, ]
 
 #claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, data=claim_size_train_data, family=gaussian(link="log"))
 claim_size.glm = glm(total_claims_cost ~ price_index+car_age+policy_tenure+fuel_price_index, data=claim_size_train_data, family=Gamma(link="inverse"))
+# inverse log link?
+#claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+sum_insured, data=claim_size_train_data, family=Gamma(link="log"))
+#claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+GDP+M1, data=claim_size_train_data, family=Gamma(link="inverse"))
 # remove FXRTWI?
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
@@ -86,14 +89,16 @@ qqnorm(resid(claim_size.glm,type="pearson"),xlab="quantiles of Std Normal",ylab=
 qqline(resid(claim_size.glm))
 
 # predicting total_claims_cost for the test set
-claim_size.predict <- 1/(predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
+claim_size.predict <- 1/predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
                                                                  car_age = claim_size_test_data$car_age, 
                                                                  M1 = claim_size_test_data$M1, 
                                                                  GDP = claim_size_test_data$GDP,
                                                                  policy_tenure = claim_size_test_data$policy_tenure,
                                                                  FXRTWI = claim_size_test_data$FXRTWI,
                                                                  fuel_price_index = claim_size_test_data$fuel_price_index,
-                                                                 sum_insured = claim_size_test_data$sum_insured)))
+                                                                 sum_insured = claim_size_test_data$sum_insured,
+                                                                 FXRJY = claim_size_test_data$FXRJY,
+                                                                 FXREUR = claim_size_test_data$FXREUR))
 #print(claim_size.predict)
 
 summary(claim_size_test_data$total_claims_cost)
@@ -116,9 +121,13 @@ claim_size_test_by_quarters <- claim_size_test_data %>%
             predicted_avg_claim_cost = mean(predicted_claims_cost),
             percent_error = abs((actual_avg_claim_cost-predicted_avg_claim_cost)/actual_avg_claim_cost))
 
-show(claim_size_test_by_quarters)
+#show(claim_size_test_by_quarters)
 mean(claim_size_test_by_quarters$percent_error)
 cor(claim_size_test_by_quarters$actual_avg_claim_cost, claim_size_test_by_quarters$predicted_avg_claim_cost)
+MSE_quarters = mean((claim_size_test_by_quarters$actual_avg_claim_cost - claim_size_test_by_quarters$predicted_avg_claim_cost)^2)
+RMSE_quarters = sqrt(MSE_quarters)
+print(MSE_quarters)
+print(RMSE_quarters)
 
 plot(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$actual_avg_claim_cost, type="l", col="red")
 lines(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$predicted_avg_claim_cost, col="blue")
@@ -131,9 +140,13 @@ claim_size_test_by_months <- claim_size_test_data %>%
             predicted_avg_claim_cost = mean(predicted_claims_cost),
             percent_error = abs((actual_avg_claim_cost-predicted_avg_claim_cost)/actual_avg_claim_cost))
 
-show(claim_size_test_by_months)
+#show(claim_size_test_by_months)
 mean(claim_size_test_by_months$percent_error)
 cor(claim_size_test_by_months$actual_avg_claim_cost, claim_size_test_by_months$predicted_avg_claim_cost)
+MSE_months = mean((claim_size_test_by_months$actual_avg_claim_cost - claim_size_test_by_months$predicted_avg_claim_cost)^2)
+RMSE_months = sqrt(MSE_months)
+print(MSE_months)
+print(RMSE_months)
 
 plot(claim_size_test_by_months$month_in_year, claim_size_test_by_months$actual_avg_claim_cost, type="l", col="red")
 lines(claim_size_test_by_months$month_in_year, claim_size_test_by_months$predicted_avg_claim_cost, col="blue")
@@ -141,3 +154,4 @@ lines(claim_size_test_by_months$month_in_year, claim_size_test_by_months$predict
 # -----------------------------------------------------------------------------
 
 # We then model claim frequency with a GLM with the Poisson distribution.
+
