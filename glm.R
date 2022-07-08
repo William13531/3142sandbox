@@ -54,6 +54,13 @@ claim_data <- merge(claim_data, gdp_qtrly_data, by="quarter_in_year", all.x=TRUE
 
 # -----------------------------------------------------------------------------
 
+# Data cleaning 
+claim_data <- claim_data %>%
+  # remove entries where the car has a negative age
+  filter(car_age >= 0)
+
+# -----------------------------------------------------------------------------
+
 # We first model the claim size with the Gamma distribution.
 claim_size_data = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0)
 
@@ -68,12 +75,18 @@ for (num in random_split) {
 claim_size_train_data <- claim_size_data[split==0, ]
 claim_size_test_data <- claim_size_data[split==1, ]
 
-#claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, data=claim_size_train_data, family=gaussian(link="log"))
-claim_size.glm = glm(total_claims_cost ~ price_index+car_age+policy_tenure+fuel_price_index, data=claim_size_train_data, family=Gamma(link="inverse"))
-# inverse log link?
-#claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+sum_insured, data=claim_size_train_data, family=Gamma(link="log"))
-#claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+GDP+M1, data=claim_size_train_data, family=Gamma(link="inverse"))
-# remove FXRTWI?
+#claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, 
+#                     data=claim_size_train_data, 
+#                     family=gaussian(link="log"))
+
+claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure,
+                     data=claim_size_train_data,
+                     family=Gamma(link="inverse"))
+
+# claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+fuel_price_index+GDP+sum_insured, 
+#                      data=claim_size_train_data, 
+#                      family=Gamma(link="log"))
+
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
 par(mfrow=c(2,2))
@@ -89,16 +102,28 @@ qqnorm(resid(claim_size.glm,type="pearson"),xlab="quantiles of Std Normal",ylab=
 qqline(resid(claim_size.glm))
 
 # predicting total_claims_cost for the test set
-claim_size.predict <- 1/predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
-                                                                 car_age = claim_size_test_data$car_age, 
-                                                                 M1 = claim_size_test_data$M1, 
-                                                                 GDP = claim_size_test_data$GDP,
-                                                                 policy_tenure = claim_size_test_data$policy_tenure,
-                                                                 FXRTWI = claim_size_test_data$FXRTWI,
-                                                                 fuel_price_index = claim_size_test_data$fuel_price_index,
-                                                                 sum_insured = claim_size_test_data$sum_insured,
-                                                                 FXRJY = claim_size_test_data$FXRJY,
-                                                                 FXREUR = claim_size_test_data$FXREUR))
+claim_size.predict <- 1/predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index,
+                                                               car_age = claim_size_test_data$car_age,
+                                                               M1 = claim_size_test_data$M1,
+                                                               GDP = claim_size_test_data$GDP,
+                                                               policy_tenure = claim_size_test_data$policy_tenure,
+                                                               FXRTWI = claim_size_test_data$FXRTWI,
+                                                               fuel_price_index = claim_size_test_data$fuel_price_index,
+                                                               sum_insured = claim_size_test_data$sum_insured,
+                                                               FXRJY = claim_size_test_data$FXRJY,
+                                                               FXREUR = claim_size_test_data$FXREUR))
+
+# claim_size.predict <- exp(predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
+#                                                                car_age = claim_size_test_data$car_age, 
+#                                                                M1 = claim_size_test_data$M1, 
+#                                                                GDP = claim_size_test_data$GDP,
+#                                                                policy_tenure = claim_size_test_data$policy_tenure,
+#                                                                FXRTWI = claim_size_test_data$FXRTWI,
+#                                                                fuel_price_index = claim_size_test_data$fuel_price_index,
+#                                                                sum_insured = claim_size_test_data$sum_insured,
+#                                                                FXRJY = claim_size_test_data$FXRJY,
+#                                                                FXREUR = claim_size_test_data$FXREUR)))
+
 #print(claim_size.predict)
 
 summary(claim_size_test_data$total_claims_cost)
@@ -129,7 +154,8 @@ RMSE_quarters = sqrt(MSE_quarters)
 print(MSE_quarters)
 print(RMSE_quarters)
 
-plot(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$actual_avg_claim_cost, type="l", col="red")
+plot(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$actual_avg_claim_cost, type="l", col="red",
+     xlab="Quarter in Year", ylab="Average Claim Cost", main="Predicted and Actual Average Claim Costs by Quarters")
 lines(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$predicted_avg_claim_cost, col="blue")
 
 # by month
@@ -148,10 +174,94 @@ RMSE_months = sqrt(MSE_months)
 print(MSE_months)
 print(RMSE_months)
 
-plot(claim_size_test_by_months$month_in_year, claim_size_test_by_months$actual_avg_claim_cost, type="l", col="red")
+plot(claim_size_test_by_months$month_in_year, claim_size_test_by_months$actual_avg_claim_cost, type="l", col="red",
+     xlab="Month in Year", ylab="Average Claim Cost", main="Predicted and Actual Average Claim Costs by Months")
 lines(claim_size_test_by_months$month_in_year, claim_size_test_by_months$predicted_avg_claim_cost, col="blue")
 
 # -----------------------------------------------------------------------------
 
 # We then model claim frequency with a GLM with the Poisson distribution.
+
+# Consider all cars, including those without any claims.
+data_by_quarters <- claim_data %>%
+  group_by(quarter_in_year) %>%
+  summarise(total_car_month = n(),
+            avg_car_age = mean(car_age))
+
+# Consider only claims with positive total_claims_cost
+claims_by_quarters <- claim_data %>%
+  filter(total_claims_cost > 0) %>%
+  group_by(quarter_in_year) %>%
+  summarise(total_claims = n())
+
+# Merge two tables
+frequency_by_quarters <- merge(data_by_quarters, claims_by_quarters, by="quarter_in_year")
+
+# Model claim frequency with the average number of claims for a car in a quarter
+frequency_by_quarters["avg_claim_frequency"] <- c(frequency_by_quarters$total_claims/frequency_by_quarters$total_car_month)
+
+frequency_by_quarters["fuel_price"] <- fuel_qtrly_data$fuel_price_index
+frequency_by_quarters <- merge(frequency_by_quarters, gdp_qtrly_data, by="quarter_in_year", all.x=TRUE)
+  #gdp_qtrly_data$GDP
+
+# Regression
+# Check for normal distribution
+par(mfrow=c(1,1))
+hist(frequency_by_quarters$avg_claim_frequency) 
+hist(frequency_by_quarters$total_claims)
+
+# Check for linearity
+plot(frequency_by_quarters$avg_claim_frequency ~ frequency_by_quarters$fuel_price)
+plot(frequency_by_quarters$total_claims ~ frequency_by_quarters$fuel_price)
+
+# Check for correlation
+cor(frequency_by_quarters$fuel_price, frequency_by_quarters$GDP) 
+
+# Model claim frequency
+claim_frequency_data = subset(frequency_by_quarters)
+
+# All 20 observations used for training
+claim_frequency_glm <- glm(formula = total_claims ~ fuel_price + GDP + avg_car_age, family = 'binomial', data = frequency_by_quarters)
+summary(claim_frequency_glm)
+
+claims_glm <- glm(formula = total_claims ~ fuel_price + GDP + avg_car_age, family = poisson, data = frequency_by_quarters)
+summary(claims_glm)
+print(anova(claims_glm, test="Chi"))
+
+par(mfrow=c(2,2))
+plot(claims_glm)
+
+# Randomly allocate 70% of data into the training set and 30% of the data into the testing set
+random_split <- runif(nrow(claim_frequency_data))
+split = rep(0, nrow(claim_frequency_data))
+counter = 1
+for (num in random_split) {
+  if (num >= 0.3) split[counter] = 0 else split[counter] = 1
+  counter = counter + 1
+}
+
+claim_frequency_train_data <- claim_frequency_data[split==0, ]
+claim_frequency_test_data <- claim_frequency_data[split==1, ]
+
+claims.glm <- glm(formula = total_claims ~ fuel_price + GDP + avg_car_age, family = poisson, data = claim_frequency_train_data)
+summary(claims.glm)
+print(anova(claims.glm, test="Chi"))
+
+par(mfrow=c(2,2))
+plot(claims.glm)
+
+claim_frequency.predict <- exp(predict.glm(claims.glm, data.frame(fuel_price = claim_frequency_test_data$fuel_price, 
+                                                                  GDP = claim_frequency_test_data$GDP,
+                                                                  avg_car_age = claim_frequency_test_data$avg_car_age)))
+# Check similarity between prediction and true value
+summary(claim_frequency_test_data$total_claims)
+summary(claim_frequency.predict)
+
+# Find the Mean Squared Error and the Root Mean Squared Error of the Model
+MSE = mean((claim_frequency_test_data$total_claims-claim_frequency.predict)^2)
+print(MSE)
+RMSE = sqrt(MSE)
+print(RMSE)
+plot(claim_frequency.predict, claim_frequency_test_data$total_claims)
+
 
