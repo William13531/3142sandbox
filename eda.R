@@ -237,10 +237,10 @@ claims_by_postcode = claims_by_postcode[order(-claims_by_postcode$AvgPaidPerCarM
 
 # Import and modify data
 automotive_fuel_price_movements <- read.csv("Automotive fuel quarterly movement.csv")
-automotive_fuel_price_movements$嚜熹uarter <- as.yearqtr(automotive_fuel_price_movements$嚜熹uarter)
+automotive_fuel_price_movements$quarter <- as.yearqtr(automotive_fuel_price_movements$嚜熹uarter)
 
 GDP <- read.csv("Gross domestic product.csv")
-GDP$嚜熹uarter <- as.yearqtr(GDP$嚜熹uarter)
+GDP$quarter <- as.yearqtr(GDP$quarter)
 
 claim_frequency <- merge(data_by_quarters, claims_by_quarters, by="quarter_in_year")
 claim_frequency["claim_frequency"] <- c(claim_frequency$total_claims/claim_frequency$total_car_month)
