@@ -6,11 +6,16 @@ library(ggplot2)
 library(tidyverse)
 library("zoo")
 library(sf)
+library(caret)
+library(boot)
 
 # -----------------------------------------------------------------------------
 
 # Helper functions
 specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k)))
+
+#specify the cross-validation method
+ctrl <- trainControl(method = "cv", number = 5)
 
 # -----------------------------------------------------------------------------
 
@@ -75,13 +80,15 @@ for (num in random_split) {
 claim_size_train_data <- claim_size_data[split==0, ]
 claim_size_test_data <- claim_size_data[split==1, ]
 
-#claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured, 
-#                     data=claim_size_train_data, 
+# claim_size.glm = glm(total_claims_cost ~ price_index+FXRTWI+car_age+sum_insured,
+#                     data=claim_size_train_data,
 #                     family=gaussian(link="log"))
 
-claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure,
+claim_size.glm <- glm(total_claims_cost ~ price_index+policy_tenure,
                      data=claim_size_train_data,
                      family=Gamma(link="inverse"))
+
+#(cv.err.10 <- cv.glm(claim_size_train_data, claim_size.glm, K = 10)$delta)
 
 # claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+fuel_price_index+GDP+sum_insured, 
 #                      data=claim_size_train_data, 
@@ -155,8 +162,10 @@ print(MSE_quarters)
 print(RMSE_quarters)
 
 plot(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$actual_avg_claim_cost, type="l", col="red",
-     xlab="Quarter in Year", ylab="Average Claim Cost", main="Predicted and Actual Average Claim Costs by Quarters")
+     xlab="Quarter in Year", ylab="Average Claim Cost ($)", main="Predicted and Actual Average Claim Costs for the Test Set by Quarters")
 lines(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$predicted_avg_claim_cost, col="blue")
+legend(2016.5, 11500, legend=c("Actual", "Predicted"),
+       col=c("red", "blue"), lty=1:1, cex=0.85, bty = "n")
 
 # by month
 claim_size_test_by_months <- claim_size_test_data %>%
@@ -175,9 +184,10 @@ print(MSE_months)
 print(RMSE_months)
 
 plot(claim_size_test_by_months$month_in_year, claim_size_test_by_months$actual_avg_claim_cost, type="l", col="red",
-     xlab="Month in Year", ylab="Average Claim Cost", main="Predicted and Actual Average Claim Costs by Months")
+     xlab="Month in Year", ylab="Average Claim Cost ($)", main="Predicted and Actual Average Claim Costs for the Test Set by Months")
 lines(claim_size_test_by_months$month_in_year, claim_size_test_by_months$predicted_avg_claim_cost, col="blue")
-
+legend(2016.5, 14500, legend=c("Actual", "Predicted"),
+       col=c("red", "blue"), lty=1:1, cex=0.85, bty = "n")
 # -----------------------------------------------------------------------------
 
 # We then model claim frequency with a GLM with the Poisson distribution.
@@ -244,6 +254,8 @@ claim_frequency_train_data <- claim_frequency_data[split==0, ]
 claim_frequency_test_data <- claim_frequency_data[split==1, ]
 
 claims.glm <- glm(formula = total_claims ~ fuel_price + GDP + avg_car_age, family = poisson, data = claim_frequency_train_data)
+(freq.cv.err <- cv.glm(claim_frequency_train_data, claims.glm, K=5)$delta)
+
 summary(claims.glm)
 print(anova(claims.glm, test="Chi"))
 
