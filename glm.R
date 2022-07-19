@@ -6,8 +6,9 @@ library(ggplot2)
 library(tidyverse)
 library("zoo")
 library(sf)
-library(caret)
+#library(caret)
 library(boot)
+library(splines)
 
 # -----------------------------------------------------------------------------
 
@@ -88,11 +89,45 @@ claim_size.glm <- glm(total_claims_cost ~ price_index+policy_tenure,
                      data=claim_size_train_data,
                      family=Gamma(link="inverse"))
 
-#(cv.err.10 <- cv.glm(claim_size_train_data, claim_size.glm, K = 10)$delta)
+# TODO: Try subset selection to find the best subsets of explanatory variables.
 
-# claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+fuel_price_index+GDP+sum_insured, 
-#                      data=claim_size_train_data, 
-#                      family=Gamma(link="log"))
+# Checking for higher degree of polynomials
+# cv.error <- rep(0,25)
+# for (i in 1:5) {
+#   for (j in 1:5) {
+#     fiti <- glm(total_claims_cost ~ poly(price_index, i, raw = TRUE, simple = T) 
+#                 + poly(policy_tenure, j, raw = TRUE, simple = T), 
+#                 data=claim_size_data,
+#                 family=Gamma(link="inverse"))
+#     cv.error[5 * i + j - 5] <- cv.glm(claim_size_data, fiti, K=10)$delta[1]
+#   }
+# }
+# plot(seq(1,25),cv.error)
+# min(cv.error)
+
+# Trying spline regression
+# rss <- rep(0,10)
+# colors <- c("red", "blue", "green", "brown", "orange", "purple",
+#              "pink", "yellow", "violet", "magenta")
+# for (i in 4:13) {
+#   fiti <- glm(total_claims_cost ~ bs(price_index+policy_tenure, df=i), 
+#                   data=claim_size_data,
+#                   family=Gamma(link="inverse"))
+#   rss[i-3] <- sum(fiti$residuals^2)
+# }
+
+# m3 <- glm(total_claims_cost ~ ns(price_index+policy_tenure, 3),
+#                       data=claim_size_data,
+#                       family=Gamma(link="inverse"))
+# m3pred <- predict(m3, type = "response")
+# claim_size.cv.error <- cv.glm(claim_size_data, m3, K=10)$delta[1]
+# plot(claim_size_data$total_claims_cost, m3pred)
+
+# (cv.err.10 <- cv.glm(claim_size_train_data, claim_size.glm, K = 10)$delta)
+# 
+# claim_size.glm = glm(total_claims_cost ~ price_index+policy_tenure+fuel_price_index+GDP+sum_insured,
+#                     data=claim_size_train_data,
+#                     family=Gamma(link="log"))
 
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
@@ -142,6 +177,9 @@ print(MSE)
 RMSE = sqrt(MSE)
 print(RMSE)
 plot(claim_size.predict, claim_size_test_data$total_claims_cost)
+
+(size.cv.err <- cv.glm(claim_size_train_data, claim_size.glm, K=5)$delta)
+size.cv.rmse = sqrt(size.cv.err)
 
 claim_size_test_data["predicted_claims_cost"] = claim_size.predict
 
