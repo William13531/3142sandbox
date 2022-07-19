@@ -9,6 +9,7 @@ library(sf)
 #library(caret)
 library(boot)
 library(splines)
+library(mgcv)
 
 # -----------------------------------------------------------------------------
 
@@ -89,9 +90,14 @@ claim_size.glm <- glm(total_claims_cost ~ price_index+policy_tenure,
                      data=claim_size_train_data,
                      family=Gamma(link="inverse"))
 
+# TODO: Try GAM
+# claim_size.gam <- gam(total_claims_cost ~ price_index+policy_tenure,
+#                       data=claim_size_data)
+# summary(claim_size.gam)
+
 # TODO: Try subset selection to find the best subsets of explanatory variables.
 
-# Checking for higher degree of polynomials
+# TODO: Checking for higher degree of polynomials
 # cv.error <- rep(0,25)
 # for (i in 1:5) {
 #   for (j in 1:5) {
@@ -105,7 +111,7 @@ claim_size.glm <- glm(total_claims_cost ~ price_index+policy_tenure,
 # plot(seq(1,25),cv.error)
 # min(cv.error)
 
-# Trying spline regression
+# TODO: Trying spline regression
 # rss <- rep(0,10)
 # colors <- c("red", "blue", "green", "brown", "orange", "purple",
 #              "pink", "yellow", "violet", "magenta")
@@ -178,8 +184,8 @@ RMSE = sqrt(MSE)
 print(RMSE)
 plot(claim_size.predict, claim_size_test_data$total_claims_cost)
 
-(size.cv.err <- cv.glm(claim_size_train_data, claim_size.glm, K=5)$delta)
-size.cv.rmse = sqrt(size.cv.err)
+(size.cv.err <- cv.glm(claim_size_train_data, claim_size.glm, K=5)$delta[1])
+(size.cv.rmse = sqrt(size.cv.err))
 
 claim_size_test_data["predicted_claims_cost"] = claim_size.predict
 
