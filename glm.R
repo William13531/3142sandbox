@@ -10,6 +10,8 @@ library(sf)
 library(boot)
 library(splines)
 library(mgcv)
+library(leaps)
+library(glmnet)
 
 # -----------------------------------------------------------------------------
 
@@ -69,7 +71,9 @@ claim_data <- claim_data %>%
 # -----------------------------------------------------------------------------
 
 # We first model the claim size with the Gamma distribution.
-claim_size_data = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0)
+claim_size_data = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0, 
+                         select = -c(quarter_in_year, month_in_year, accident_month, term_start_date, term_expiry_date, policy_id, claim_loss_date, 
+                                     vehicle_class, risk_state_name, risk_postcode))
 
 # Randomly allocate 70% of data into the training set and 30% of the data into the testing set
 random_split <- runif(nrow(claim_size_data))
@@ -86,11 +90,41 @@ claim_size_test_data <- claim_size_data[split==1, ]
 #                     data=claim_size_train_data,
 #                     family=gaussian(link="log"))
 
-claim_size.glm <- glm(total_claims_cost ~ price_index+policy_tenure,
-                     data=claim_size_train_data,
-                     family=Gamma(link="inverse"))
+subset <- regsubsets(total_claims_cost~., claim_size_data, nvmax = 10, method = "forward")
+total_claims_cost_subset <- summary(subset)
+par(mfrow = c(2,2))
+plot(seq(1,10,1), total_claims_cost_subset$aic, main="AIC")
+plot(seq(1,10,1), total_claims_cost_subset$adjr2, main="Adjusted R^2")
+plot(seq(1,10,1), total_claims_cost_subset$cp, main="Cp")
+plot(seq(1,10,1), total_claims_cost_subset$bic, main="BIC")
+
+#claim_size.glm <- glm(total_claims_cost ~ policy_tenure+sum_insured+car_age+price_index,
+#                      data=claim_size_train_data,
+#                      family=Gamma(link="log"))
+
+claim_size.glm <- glm(total_claims_cost ~ policy_tenure+sum_insured+car_age+price_index,
+                      data=claim_size_train_data,
+                      family=Gamma(link="log"))
+summary(claim_size.glm)
+(cv.err <- cv.glm(claim_size_train_data, claim_size.glm, K = 10)$delta[1])
+
+claim_size.predict <- exp(predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index,
+                                                                 car_age = claim_size_test_data$car_age,
+                                                                 policy_tenure = claim_size_test_data$policy_tenure,
+                                                                 sum_insured = claim_size_test_data$sum_insured)))
+summary(claim_size_test_data$total_claims_cost)
+summary(claim_size.predict)
+
+# cv.ridge <- cv.glmnet()
+                          
+# claim_size.glm2 <- glm(total_claims_cost ~ policy_tenure+price_index,
+#                        data=claim_size_train_data,
+#                        family=Gamma(link="inverse"))
+# summary(claim_size.glm2)
+# (cv.err2 <- cv.glm(claim_size_train_data, claim_size.glm2, K = 10)$delta[1])
 
 # TODO: Try GAM
+# https://m-clark.github.io/generalized-additive-models/application.html
 # claim_size.gam <- gam(total_claims_cost ~ price_index+policy_tenure,
 #                       data=claim_size_data)
 # summary(claim_size.gam)
@@ -160,19 +194,6 @@ claim_size.predict <- 1/predict.glm(claim_size.glm, data.frame(price_index = cla
                                                                sum_insured = claim_size_test_data$sum_insured,
                                                                FXRJY = claim_size_test_data$FXRJY,
                                                                FXREUR = claim_size_test_data$FXREUR))
-
-# claim_size.predict <- exp(predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index, 
-#                                                                car_age = claim_size_test_data$car_age, 
-#                                                                M1 = claim_size_test_data$M1, 
-#                                                                GDP = claim_size_test_data$GDP,
-#                                                                policy_tenure = claim_size_test_data$policy_tenure,
-#                                                                FXRTWI = claim_size_test_data$FXRTWI,
-#                                                                fuel_price_index = claim_size_test_data$fuel_price_index,
-#                                                                sum_insured = claim_size_test_data$sum_insured,
-#                                                                FXRJY = claim_size_test_data$FXRJY,
-#                                                                FXREUR = claim_size_test_data$FXREUR)))
-
-#print(claim_size.predict)
 
 summary(claim_size_test_data$total_claims_cost)
 summary(claim_size.predict)
