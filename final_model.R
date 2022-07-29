@@ -2,17 +2,21 @@
 library(readr)
 library(dplyr)
 library(tidyselect)
+library(lubridate)
 library(ggplot2)
 library(tidyverse)
 library("zoo")
 library(sf)
-# library("recipes")
+library("recipes")
 library(caret)
 library(boot)
 library(splines)
 library(mgcv)
 library(leaps)
 library(glmnet)
+library(randomForest)
+library(gbm)
+library("formattable")
 
 # -----------------------------------------------------------------------------
 
@@ -39,6 +43,12 @@ solve_eq <- function(num) {
 
 # -----------------------------------------------------------------------------
 
+# Declare static variables here
+lockdown_start = as.yearmon("2020-03-01", format="%Y-%m")
+highest_degree = 3
+
+# -----------------------------------------------------------------------------
+
 # Import and modify data here
 
 claim_data <- read.csv("ACTL31425110AssignmentData2022.csv", na.strings=c("", "NA"), header=TRUE)
@@ -52,6 +62,15 @@ gdp_qtrly_data <- read.csv("gdp.csv")
 claim_data['quarter_in_year'] <- as.yearqtr(claim_data$accident_month, format="%Y-%m-%d")
 # Added another column to include the month of the year for each record.
 claim_data['month_in_year'] <- as.yearmon(claim_data$accident_month, format="%Y-%m-%d")
+# Added a column to include the month only.
+claim_data['month'] <- month.name[month(claim_data$accident_month)]
+
+# 1 denotes lockdown, 0 denotes not in lockdown.
+claim_data <- claim_data %>%
+  mutate(lockdown = if_else(claim_data$month_in_year - lockdown_start >= 0, 1, 0))
+
+#claim_data['vehicle_class_int'] <- as.numeric(gsub(".*?([0-9]+).*", "\\1", claim_data$vehicle_class))
+
 # Added a column to include the age of the car
 claim_data['car_age'] <- as.numeric(format(as.Date(claim_data$accident_month),format="%Y")) - claim_data$year_of_manufacture
 
@@ -90,8 +109,9 @@ claim_data <- claim_data %>%
 claim_size_data = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0)
 
 claim_size_data_choose_predictors = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0, 
-                         select = -c(quarter_in_year, month_in_year, accident_month, term_start_date, term_expiry_date, policy_id, claim_loss_date, 
-                                     vehicle_class, risk_state_name, risk_postcode))
+                         select = -c(quarter_in_year, accident_month, term_start_date, term_expiry_date, 
+                                     policy_id, claim_loss_date, vehicle_class, 
+                                     month_in_year, month, exposure, risk_postcode, risk_state_name)) 
 
 # Use best-subset selection to choose predictors.
 subset <- regsubsets(total_claims_cost~., claim_size_data_choose_predictors, nvmax = 10, method = "exhaustive")
@@ -105,19 +125,23 @@ plot(seq(1,10,1), total_claims_cost_subset$bic, main="Bayesian Information Crite
 # Hence we choose 4 predictors for total_claims_cost which are policy_tenure, sum_insured,
 # year_of_manufacture and price_index.
 
+# boost <- gbm(total_claims_cost ~ ., distribution = "gaussian", data = claim_size_data_choose_predictors, n.trees = 1000, shrinkage = 0.55)
+# summary(boost)
+
 # Choose the degree of polynomial for the predictors.
-highest_degree = 3
 cv.error <- rep(0,highest_degree^4)
 for (i in 1:highest_degree) {
   for (j in 1:highest_degree) {
     for (k in 1:highest_degree) {
       for (l in 1:highest_degree) {
-        fiti <- glm(total_claims_cost ~ poly(policy_tenure, i, raw = TRUE, simple = T) +
+        fiti <- glm(total_claims_cost ~
+                      poly(policy_tenure, i, raw = TRUE, simple = T) +
                       poly(sum_insured, j, raw = TRUE, simple = T) +
                       poly(year_of_manufacture, k, raw = TRUE, simple = T) +
                       poly(price_index, l, raw = TRUE, simple = T),
                     data=claim_size_data,
                     family=poisson(link="log"))
+                    # family=Gamma(link="log"))
         cv.error[(i-1)*highest_degree^3 + (j-1)*highest_degree^2 + (k-1)*highest_degree + l] <- cv.glm(claim_size_data, fiti, K=10)$delta[1]
       }
     }
@@ -126,10 +150,27 @@ for (i in 1:highest_degree) {
 plot(seq(1,highest_degree^4),cv.error)
 match(min(cv.error), cv.error)
 
-degs <- solve_eq(match(min(cv.error), cv.error))
+(degs <- solve_eq(match(min(cv.error), cv.error)))
+(pct_error_reduction_poly = percent(min(cv.error)/cv.error[1] - 1))
+# The degrees of polynomials chosen leading to the lowest cross-validation prediction error are
+# 2 for policy_tenure, 2 for sum_insured, 2 for year_of_manufacture and 1 for price_index. 
+# This reduces the prediction error by more than 90% comparing with all degree-one polynomials for Gamma.
+# This reduces the prediction error by more than 15% comparing with all degree-one polynomials for Poisson.
 
-# The degrees of polynomials chosen are 2 for policy_tenure, 2 for sum_insured, 2 for year_of_manufacture
-# and 1 for price_index.
+# Trying spline regression
+rss <- rep(0,15)
+colors <- c("red", "blue", "green", "brown", "orange", "purple",
+            "pink", "yellow", "violet", "magenta")
+for (i in 4:18) {
+  fiti <- glm(total_claims_cost ~ bs(policy_tenure + sum_insured + year_of_manufacture + price_index, df=i),
+              data=claim_size_data,
+              family=poisson(link="log"))
+              # family=Gamma(link="log"))
+  rss[i-3] <- sum(fiti$residuals^2)
+}
+plot(seq(1,15), rss)
+(pct_rss_reduction_spline = percent(min(rss)/rss[1] - 1))
+# Only trivial improvement with the introduction of spline regression
 
 # Training/Testing Sets for Validation
 # Randomly allocate 70% of data into the training set and 30% of the data into the testing set
@@ -143,20 +184,54 @@ for (num in random_split) {
 claim_size_train_data <- claim_size_data[split==0, ]
 claim_size_test_data <- claim_size_data[split==1, ]
 
+# ridge_reg = glmnet(as.matrix(claim_size_train_data), claim_size_train_data$total_claims_cost, nlambda = 25, alpha = 0, family = 'gaussian', lambda = 0.001)
+
+# Trial with random forest
+# bag <- randomForest(total_claims_cost ~ ., data = claim_size_train_data, importance = TRUE)
+# pred.bag = predict(bag, newdata = claim_size_test_data)
+# pred.bag.mse <- mean((claim_size_test_data$total_claims_cost - pred.bag)^2)
+# 
+# importance(bag)
+
 # Run a GLM with the four predictors and a poisson error with a log link function.
 # Also tried others (Gamma error with log/inverse link)
 
-claim_size.glm <- glm(total_claims_cost ~ poly(policy_tenure, 2, raw = TRUE, simple = T)+
+# 10-fold cross validation with GLM
+(cv.err <- cv.glm(claim_size_data, glm(total_claims_cost ~ vehicle_class + month +
+                                        poly(policy_tenure, 2, raw = TRUE, simple = T) +
+                                        poly(sum_insured, 2, raw = TRUE, simple = T) +
+                                        poly(year_of_manufacture, 1, raw = TRUE, simple = T) +
+                                        poly(price_index, 1, raw = TRUE, simple = T),
+                                      data=claim_size_data,
+                                      family=poisson(link="log")), K = 10)$delta[1])
+
+# (cv.err <- cv.glm(claim_size_data, glm(total_claims_cost ~
+#                                          poly(policy_tenure, degs[1], raw = TRUE, simple = T) +
+#                                          poly(sum_insured, degs[2], raw = TRUE, simple = T) +
+#                                          poly(year_of_manufacture, degs[3], raw = TRUE, simple = T) +
+#                                          poly(price_index, degs[4], raw = TRUE, simple = T),
+#                                        data=claim_size_data,
+#                                        family=Gamma(link="log")), K = 10)$delta[1])
+
+# Training / testing set
+claim_size.glm <- glm(total_claims_cost ~ vehicle_class + month + lockdown +
+                        poly(policy_tenure, 2, raw = TRUE, simple = T) +
                         poly(sum_insured, 2, raw = TRUE, simple = T) +
-                        poly(year_of_manufacture, 2, raw = TRUE, simple = T)+
+                        poly(year_of_manufacture, 1, raw = TRUE, simple = T) +
                         poly(price_index, 1, raw = TRUE, simple = T),
                       data=claim_size_train_data,
                       family=poisson(link="log"))
+                      # family=Gamma(link="log")
+
+# claim_size.glm <- glm(total_claims_cost ~ 
+#                         poly(policy_tenure, degs[1], raw = TRUE, simple = T) +
+#                         poly(sum_insured, degs[2], raw = TRUE, simple = T) +
+#                         poly(year_of_manufacture, degs[3], raw = TRUE, simple = T) +
+#                         poly(price_index, degs[4], raw = TRUE, simple = T),
+#                       data=claim_size_train_data,
+#                       family=Gamma(link="log"))
 
 summary(claim_size.glm)
-
-# 10-fold cross validation
-(cv.err <- cv.glm(claim_size_train_data, claim_size.glm, K = 10)$delta[1])
 
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
@@ -174,9 +249,13 @@ qqline(resid(claim_size.glm),col='red')
 
 # Predict total_claims_cost for the testing set
 claim_size.predict <- exp((predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index,
-                                                                 year_of_manufacture = claim_size_test_data$year_of_manufacture,
-                                                                 policy_tenure = claim_size_test_data$policy_tenure,
-                                                                 sum_insured = claim_size_test_data$sum_insured))))
+                                                                  lockdown = claim_size_test_data$lockdown,
+                                                                  vehicle_class = claim_size_test_data$vehicle_class,
+                                                                  month = claim_size_test_data$month,
+                                                                  year_of_manufacture = claim_size_test_data$year_of_manufacture,
+                                                                  # car_age = claim_size_test_data$car_age,
+                                                                  policy_tenure = claim_size_test_data$policy_tenure,
+                                                                  sum_insured = claim_size_test_data$sum_insured))))
 summary(claim_size_test_data$total_claims_cost)
 summary(claim_size.predict)
 
@@ -240,5 +319,6 @@ print(MAE_months)
 plot(claim_size_test_by_months$month_in_year, claim_size_test_by_months$actual_avg_claim_cost, type="l", col="red",
      xlab="Month in Year", ylab="Average Claim Cost ($)", main="Predicted and Actual Average Claim Costs for the Test Set by Months")
 lines(claim_size_test_by_months$month_in_year, claim_size_test_by_months$predicted_avg_claim_cost, col="blue")
-legend(2016.5, 14500, legend=c("Actual", "Predicted"),
+legend(2016.5, 16000, legend=c("Actual", "Predicted"),
        col=c("red", "blue"), lty=1:1, cex=0.85, bty = "n")
+

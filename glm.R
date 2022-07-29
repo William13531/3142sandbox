@@ -150,7 +150,7 @@ summary(claim_size.predict)
 # colors <- c("red", "blue", "green", "brown", "orange", "purple",
 #              "pink", "yellow", "violet", "magenta")
 # for (i in 4:13) {
-#   fiti <- glm(total_claims_cost ~ bs(price_index+policy_tenure, df=i), 
+#   fiti <- glm(total_claims_cost ~ bs(price_index+policy_tenure, df=i),
 #                   data=claim_size_data,
 #                   family=Gamma(link="inverse"))
 #   rss[i-3] <- sum(fiti$residuals^2)
