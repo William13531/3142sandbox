@@ -22,6 +22,21 @@ specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k
 # specify the cross-validation method
 # ctrl <- trainControl(method = "cv", number = 5)
 
+# Helper function to solve for positive integer roots.
+solve_eq <- function(num) {
+  for (i in 1:highest_degree) {
+    for (j in 1:highest_degree) {
+      for (k in 1:highest_degree) {
+        for (l in 1:highest_degree) {
+          if ((i-1)*highest_degree^3 + (j-1)*highest_degree^2 + (k-1)*highest_degree + l == num) {
+            return (c(i,j,k,l))
+          }
+        }
+      }
+    }
+  }  
+}
+
 # -----------------------------------------------------------------------------
 
 # Import and modify data here
@@ -90,6 +105,32 @@ plot(seq(1,10,1), total_claims_cost_subset$bic, main="Bayesian Information Crite
 # Hence we choose 4 predictors for total_claims_cost which are policy_tenure, sum_insured,
 # year_of_manufacture and price_index.
 
+# Choose the degree of polynomial for the predictors.
+highest_degree = 3
+cv.error <- rep(0,highest_degree^4)
+for (i in 1:highest_degree) {
+  for (j in 1:highest_degree) {
+    for (k in 1:highest_degree) {
+      for (l in 1:highest_degree) {
+        fiti <- glm(total_claims_cost ~ poly(policy_tenure, i, raw = TRUE, simple = T) +
+                      poly(sum_insured, j, raw = TRUE, simple = T) +
+                      poly(year_of_manufacture, k, raw = TRUE, simple = T) +
+                      poly(price_index, l, raw = TRUE, simple = T),
+                    data=claim_size_data,
+                    family=poisson(link="log"))
+        cv.error[(i-1)*highest_degree^3 + (j-1)*highest_degree^2 + (k-1)*highest_degree + l] <- cv.glm(claim_size_data, fiti, K=10)$delta[1]
+      }
+    }
+  }
+}
+plot(seq(1,highest_degree^4),cv.error)
+match(min(cv.error), cv.error)
+
+degs <- solve_eq(match(min(cv.error), cv.error))
+
+# The degrees of polynomials chosen are 2 for policy_tenure, 2 for sum_insured, 2 for year_of_manufacture
+# and 1 for price_index.
+
 # Training/Testing Sets for Validation
 # Randomly allocate 70% of data into the training set and 30% of the data into the testing set
 random_split <- runif(nrow(claim_size_data))
@@ -105,9 +146,13 @@ claim_size_test_data <- claim_size_data[split==1, ]
 # Run a GLM with the four predictors and a poisson error with a log link function.
 # Also tried others (Gamma error with log/inverse link)
 
-claim_size.glm <- glm(total_claims_cost ~ policy_tenure+sum_insured+year_of_manufacture+price_index,
+claim_size.glm <- glm(total_claims_cost ~ poly(policy_tenure, 2, raw = TRUE, simple = T)+
+                        poly(sum_insured, 2, raw = TRUE, simple = T) +
+                        poly(year_of_manufacture, 2, raw = TRUE, simple = T)+
+                        poly(price_index, 1, raw = TRUE, simple = T),
                       data=claim_size_train_data,
                       family=poisson(link="log"))
+
 summary(claim_size.glm)
 
 # 10-fold cross validation
