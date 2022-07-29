@@ -14,6 +14,7 @@ library(splines)
 library(mgcv)
 library(leaps)
 library(glmnet)
+library(MASS)
 library(randomForest)
 library(gbm)
 library("formattable")
@@ -64,6 +65,8 @@ claim_data['quarter_in_year'] <- as.yearqtr(claim_data$accident_month, format="%
 claim_data['month_in_year'] <- as.yearmon(claim_data$accident_month, format="%Y-%m-%d")
 # Added a column to include the month only.
 claim_data['month'] <- month.name[month(claim_data$accident_month)]
+# Added a date for any accidents
+claim_data['accident_date'] <- date(ymd_hms(claim_data$claim_loss_date, tz="NZ"))
 
 # 1 denotes lockdown, 0 denotes not in lockdown.
 claim_data <- claim_data %>%
@@ -110,12 +113,11 @@ claim_size_data = subset(claim_data, total_claims_cost != "NA" & total_claims_co
 
 claim_size_data_choose_predictors = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0, 
                          select = -c(quarter_in_year, accident_month, term_start_date, term_expiry_date, 
-                                     policy_id, claim_loss_date, vehicle_class, 
+                                     policy_id, claim_loss_date, vehicle_class, accident_date,
                                      month_in_year, month, exposure, risk_postcode, risk_state_name)) 
 
 # Use best-subset selection to choose predictors.
-subset <- regsubsets(total_claims_cost~., claim_size_data_choose_predictors, nvmax = 10, method = "exhaustive")
-total_claims_cost_subset <- summary(subset)
+total_claims_cost_subset <- summary(regsubsets(total_claims_cost~., claim_size_data_choose_predictors, nvmax = 10, method = "exhaustive"))
 par(mfrow = c(2,2))
 plot(seq(1,10,1), total_claims_cost_subset$rss, main="Residual Sum of Squares")
 plot(seq(1,10,1), total_claims_cost_subset$adjr2, main="Adjusted R^2")
@@ -187,31 +189,24 @@ claim_size_test_data <- claim_size_data[split==1, ]
 # ridge_reg = glmnet(as.matrix(claim_size_train_data), claim_size_train_data$total_claims_cost, nlambda = 25, alpha = 0, family = 'gaussian', lambda = 0.001)
 
 # Trial with random forest
-# bag <- randomForest(total_claims_cost ~ ., data = claim_size_train_data, importance = TRUE)
-# pred.bag = predict(bag, newdata = claim_size_test_data)
-# pred.bag.mse <- mean((claim_size_test_data$total_claims_cost - pred.bag)^2)
-# 
-# importance(bag)
+bag <- randomForest(total_claims_cost ~ ., data = claim_size_train_data, importance = TRUE)
+pred.bag = predict(bag, newdata = claim_size_test_data)
+pred.bag.mse <- mean((claim_size_test_data$total_claims_cost - pred.bag)^2)
+
+importance(bag)
 
 # Run a GLM with the four predictors and a poisson error with a log link function.
 # Also tried others (Gamma error with log/inverse link)
 
 # 10-fold cross validation with GLM
-(cv.err <- cv.glm(claim_size_data, glm(total_claims_cost ~ vehicle_class + month +
+(cv.err <- cv.glm(claim_size_data, glm(total_claims_cost ~ vehicle_class + month + lockdown +
                                         poly(policy_tenure, 2, raw = TRUE, simple = T) +
                                         poly(sum_insured, 2, raw = TRUE, simple = T) +
                                         poly(year_of_manufacture, 1, raw = TRUE, simple = T) +
                                         poly(price_index, 1, raw = TRUE, simple = T),
                                       data=claim_size_data,
                                       family=poisson(link="log")), K = 10)$delta[1])
-
-# (cv.err <- cv.glm(claim_size_data, glm(total_claims_cost ~
-#                                          poly(policy_tenure, degs[1], raw = TRUE, simple = T) +
-#                                          poly(sum_insured, degs[2], raw = TRUE, simple = T) +
-#                                          poly(year_of_manufacture, degs[3], raw = TRUE, simple = T) +
-#                                          poly(price_index, degs[4], raw = TRUE, simple = T),
-#                                        data=claim_size_data,
-#                                        family=Gamma(link="log")), K = 10)$delta[1])
+                                            #Gamma
 
 # Training / testing set
 claim_size.glm <- glm(total_claims_cost ~ vehicle_class + month + lockdown +
@@ -221,17 +216,17 @@ claim_size.glm <- glm(total_claims_cost ~ vehicle_class + month + lockdown +
                         poly(price_index, 1, raw = TRUE, simple = T),
                       data=claim_size_train_data,
                       family=poisson(link="log"))
-                      # family=Gamma(link="log")
-
-# claim_size.glm <- glm(total_claims_cost ~ 
-#                         poly(policy_tenure, degs[1], raw = TRUE, simple = T) +
-#                         poly(sum_insured, degs[2], raw = TRUE, simple = T) +
-#                         poly(year_of_manufacture, degs[3], raw = TRUE, simple = T) +
-#                         poly(price_index, degs[4], raw = TRUE, simple = T),
-#                       data=claim_size_train_data,
-#                       family=Gamma(link="log"))
+# family=poisson(link="log")
 
 summary(claim_size.glm)
+
+nb.glm <- glm.nb(total_claims_cost ~
+                        poly(policy_tenure, 2, raw = TRUE, simple = T) +
+                        poly(sum_insured, 2, raw = TRUE, simple = T) +
+                        poly(year_of_manufacture, 1, raw = TRUE, simple = T) +
+                        poly(price_index, 1, raw = TRUE, simple = T),
+                      data=claim_size_train_data, link = "log")
+summary(nb.glm)
 
 print(summary(claim_size.glm, corr=T))
 print(anova(claim_size.glm, test="Chi"))
@@ -248,6 +243,15 @@ qqnorm(resid(claim_size.glm,type="pearson"),xlab="quantiles of Std Normal",ylab=
 qqline(resid(claim_size.glm),col='red')
 
 # Predict total_claims_cost for the testing set
+# nb.predict <- exp(predict(nb.glm,data.frame(price_index = claim_size_test_data$price_index,
+#                             lockdown = claim_size_test_data$lockdown,
+#                             vehicle_class = claim_size_test_data$vehicle_class,
+#                             month = claim_size_test_data$month,
+#                             year_of_manufacture = claim_size_test_data$year_of_manufacture,
+#                             # car_age = claim_size_test_data$car_age,
+#                             policy_tenure = claim_size_test_data$policy_tenure,
+#                             sum_insured = claim_size_test_data$sum_insured)))
+
 claim_size.predict <- exp((predict.glm(claim_size.glm, data.frame(price_index = claim_size_test_data$price_index,
                                                                   lockdown = claim_size_test_data$lockdown,
                                                                   vehicle_class = claim_size_test_data$vehicle_class,
@@ -258,6 +262,7 @@ claim_size.predict <- exp((predict.glm(claim_size.glm, data.frame(price_index = 
                                                                   sum_insured = claim_size_test_data$sum_insured))))
 summary(claim_size_test_data$total_claims_cost)
 summary(claim_size.predict)
+summary(nb.predict)
 
 # Find the Mean Squared Error, Root Mean Squared Error and Mean Absolute Error of the Model
 MSE = mean((claim_size_test_data$total_claims_cost-claim_size.predict)^2)
@@ -294,8 +299,8 @@ print(MAE_quarters)
 plot(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$actual_avg_claim_cost, type="l", col="red",
      xlab="Quarter in Year", ylab="Average Claim Cost ($)", main="Predicted and Actual Average Claim Costs for the Test Set by Quarters")
 lines(claim_size_test_by_quarters$quarter_in_year, claim_size_test_by_quarters$predicted_avg_claim_cost, col="blue")
-legend(2016.5, 10500, legend=c("Actual", "Predicted"),
-       col=c("red", "blue"), lty=1:1, cex=0.85, bty = "n")
+legend("topleft", legend=c("Actual", "Predicted"),
+       col=c("red", "blue"), lty=1:1, cex=1.1, bty = "n")
 
 # by month
 claim_size_test_by_months <- claim_size_test_data %>%
@@ -319,6 +324,114 @@ print(MAE_months)
 plot(claim_size_test_by_months$month_in_year, claim_size_test_by_months$actual_avg_claim_cost, type="l", col="red",
      xlab="Month in Year", ylab="Average Claim Cost ($)", main="Predicted and Actual Average Claim Costs for the Test Set by Months")
 lines(claim_size_test_by_months$month_in_year, claim_size_test_by_months$predicted_avg_claim_cost, col="blue")
-legend(2016.5, 16000, legend=c("Actual", "Predicted"),
-       col=c("red", "blue"), lty=1:1, cex=0.85, bty = "n")
+legend("topleft",legend=c("Actual", "Predicted"), col=c("red", "blue"), lty=1:1, cex=1.1, bty = "n")
 
+# -----------------------------------------------------------------------------
+
+# We then model the claim frequency with GLM.
+
+# Consider all cars, including those without any claims.
+data_by_months <- claim_data %>%
+  group_by(month_in_year) %>%
+  summarise(total_car = n(),
+            avg_car_age = mean(car_age),
+            total_exposure = sum(exposure),
+            avg_policy_tenure = mean(policy_tenure),
+            avg_sum_insured = mean(sum_insured))
+
+# Consider only claims with positive total_claims_cost
+claims_by_months <- claim_data %>%
+  filter(total_claims_cost > 0) %>%
+  group_by(month_in_year) %>%
+  summarise(total_claims = n())
+
+# Merge two tables
+frequency_by_months <- merge(data_by_months, claims_by_months, by="month_in_year")
+
+# Model claim frequency with the average annual number of claims for a car in that quarter
+frequency_by_months["avg_frequency"] <- c(frequency_by_months$total_claims/frequency_by_months$total_exposure)
+
+frequency_by_months['quarter_in_year'] <- as.yearqtr(frequency_by_months$month_in_year, format="%m-%Y")
+
+frequency_by_months["fuel_price"] <- fuel_qtrly_data$fuel_price_index
+frequency_by_months <- merge(frequency_by_months, gdp_qtrly_data, by="quarter_in_year", all.x=TRUE)
+
+frequency_by_months <- frequency_by_months %>%
+  mutate(lockdown = if_else(frequency_by_months$month_in_year - lockdown_start >= 0, 1, 0))
+
+# Regression
+# Check for normal distribution
+par(mfrow=c(1,1))
+hist(frequency_by_months$avg_frequency)
+hist(frequency_by_months$total_claims)
+
+# Check for linearity
+plot(frequency_by_months$avg_frequency ~ frequency_by_months$fuel_price)
+plot(frequency_by_months$total_claims ~ frequency_by_months$fuel_price)
+
+# Check for correlation
+cor(frequency_by_months$fuel_price, frequency_by_months$GDP) 
+
+# Model claim frequency
+claim_frequency_data = subset(frequency_by_months)
+# claim_frequency_data_choose_predictors = subset(frequency_by_months, select = -c(quarter_in_year, month_in_year, total_exposure, total_claims, total_car))
+claim_frequency_data_choose_predictors = subset(frequency_by_months, select = -c(quarter_in_year, month_in_year, avg_frequency))
+
+# Best subset selection
+# Use best-subset selection to choose predictors.
+claims_frequency_subset <- summary(regsubsets(total_claims~., claim_frequency_data_choose_predictors, nvmax = 5, method = "exhaustive"))
+
+# claims_frequency_subset <- summary(regsubsets(avg_frequency~., claim_frequency_data_choose_predictors, nvmax = 5, method = "exhaustive"))
+par(mfrow = c(2,2))
+plot(seq(1,5,1), claims_frequency_subset$rss, main="Residual Sum of Squares")
+plot(seq(1,5,1), claims_frequency_subset$adjr2, main="Adjusted R^2")
+plot(seq(1,5,1), claims_frequency_subset$cp, main="Cp")
+plot(seq(1,5,1), claims_frequency_subset$bic, main="Bayesian Information Criterion")
+
+# (freq.cv.err <- cv.glm(frequency_by_months, glm(avg_frequency ~ avg_sum_insured + avg_policy_tenure + lockdown,
+#                                                 data = frequency_by_months, family= "Gamma"(link="log")), K = 10)$delta[1])
+
+(freq.cv.err <- cv.glm(frequency_by_months, glm(total_claims ~ avg_sum_insured + total_car + avg_car_age,
+                                                data = frequency_by_months, family= "poisson"(link="log")), K = 10)$delta[1])
+
+random_split <- runif(nrow(claim_frequency_data))
+split = rep(0, nrow(claim_frequency_data))
+counter = 1
+for (num in random_split) {
+  if (num >= 0.3) split[counter] = 0 else split[counter] = 1
+  counter = counter + 1
+}
+
+claim_frequency_train_data <- claim_frequency_data[split==0, ]
+claim_frequency_test_data <- claim_frequency_data[split==1, ]
+
+freq.glm <- glm(formula = total_claims ~ avg_sum_insured + total_car + avg_car_age, family = poisson(link="log"), data = claim_frequency_train_data)
+(freq.cv.err <- cv.glm(claim_frequency_train_data, freq.glm, K=5)$delta)
+
+summary(freq.glm)
+print(anova(freq.glm, test="Chi"))
+
+claim_frequency.predict <- exp(predict.glm(freq.glm, data.frame(avg_sum_insured = claim_frequency_test_data$avg_sum_insured,
+                                                                total_car = claim_frequency_test_data$total_car,
+                                                                avg_car_age = claim_frequency_test_data$avg_car_age)))
+
+summary(claim_frequency.predict)
+summary(claim_frequency_test_data$total_claims)
+
+MSE = mean((claim_frequency_test_data$total_claims-claim_frequency.predict)^2)
+print(MSE)
+RMSE = sqrt(MSE)
+print(RMSE)
+MAE = mean(abs(claim_frequency_test_data$total_claims-claim_frequency.predict))
+print(MAE)
+
+# plot(claim_frequency.predict, claim_frequency_test_data$total_claims)
+boxplot(claim_frequency_test_data$total_claims, claim_frequency.predict, 
+        main = "Boxplots for Comparison between Actual and Predicted Claims",
+        names = c("Actual", "Predicted"),
+        las = 2,
+        col = c("orange","red"),
+        border = "brown",
+        horizontal = TRUE,
+        ylim = c(80,160),
+        notch = FALSE)
