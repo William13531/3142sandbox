@@ -115,7 +115,7 @@ claim_size_data = subset(claim_data, total_claims_cost != "NA" & total_claims_co
 
 claim_size_data_choose_predictors = subset(claim_data, total_claims_cost != "NA" & total_claims_cost > 0, 
                          select = -c(quarter_in_year, month_in_year, accident_month, term_start_date, term_expiry_date, 
-                                     policy_id, claim_loss_date, vehicle_class, exposure, risk_postcode, risk_state_name, accident))
+                                     policy_id, claim_loss_date, vehicle_class, exposure, risk_postcode, risk_state_name, accident, car_age))
 
 # Use best-subset selection to choose predictors.
 total_claims_cost_subset <- summary(regsubsets(total_claims_cost~., claim_size_data_choose_predictors, nvmax = 10, method = "exhaustive"))
@@ -190,11 +190,11 @@ claim_size_test_data <- claim_size_data[split==1, ]
 # ridge_reg = glmnet(as.matrix(claim_size_train_data), claim_size_train_data$total_claims_cost, nlambda = 25, alpha = 0, family = 'gaussian', lambda = 0.001)
 
 # Trial with random forest
-bag <- randomForest(total_claims_cost ~ ., data = claim_size_train_data, importance = TRUE)
-pred.bag = predict(bag, newdata = claim_size_test_data)
-(pred.bag.mse <- mean((claim_size_test_data$total_claims_cost - pred.bag)^2))
+bag <- randomForest(total_claims_cost ~ ., data = claim_size_data_choose_predictors[split==0, ], importance = TRUE)
+pred.bag = predict(bag, newdata = claim_size_data_choose_predictors[split==1, ])
+(pred.bag.mse <- mean((claim_size_data_choose_predictors[split==1, ]$total_claims_cost - pred.bag)^2))
 (pred.bag.rmse = sqrt(pred.bag.mse))
-summary(claim_size_test_data$total_claims_cost)
+summary(claim_size_data_choose_predictors[split==1, ]$total_claims_cost)
 summary(pred.bag)
 
 importance(bag)
