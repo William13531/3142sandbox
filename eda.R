@@ -36,7 +36,8 @@ dim(data) # Consists of 1,226,044 rows and 13 columns
 data <- data %>%
   # remove entries where total_claims_cost is greater than the sum_insured
   # remove entries where the car has a negative age
-  filter(((total_claims_cost <= sum_insured) | is.na(total_claims_cost)) & car_age >= 0)
+  # filter(((total_claims_cost <= sum_insured) | is.na(total_claims_cost)) & car_age >= 0)
+  filter(car_age >= 0)
 
 # -----------------------------------------------------------------------------
 
@@ -153,12 +154,25 @@ ggplot(data = sf_oz, aes(fill = cases)) +
   scale_fill_gradient(low ="lightblue", high = "purple") +
   theme(plot.title = element_text(hjust = 0.5))
 
-# Plot total claim costs by states
-ggplot(na.omit(data)) +
-  geom_boxplot(aes(x = risk_state_name, y = total_claims_cost)) +
+state_col = c("lightblue", "lightblue1", "lightblue2", "lightblue3", "lightblue4", "steelblue", "darkblue", "royalblue")
+
+claims_states <- data %>%
+  group_by(risk_state_name) %>%
+  filter(total_claims_cost > 0)
+
+ggplot(na.omit(claims_states)) +
+  geom_boxplot(aes(x = risk_state_name, y = total_claims_cost, color=risk_state_name)) +
   coord_cartesian(ylim = c(0, 10000)) +
   labs(y="Total Claims Cost in AU$", x="State", title="Total Claims Cost by State") +
   theme(plot.title = element_text(hjust = 0.5))
+
+# Plot total claim costs by states
+ggplot(na.omit(data)) +
+  geom_boxplot(aes(x = risk_state_name, y = total_claims_cost, fill = state_col)) +
+  coord_cartesian(ylim = c(0, 10000)) +
+  labs(y="Total Claims Cost in AU$", x="State", title="Total Claims Cost by State") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylim(0,20000)
 
 # Plot average claim cost by states
 ggplot(data=data_by_state, aes(x=risk_state_name, y = avg_claims)) +
