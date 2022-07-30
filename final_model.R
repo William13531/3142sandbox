@@ -480,18 +480,39 @@ predict_mthly_no_of_claims <- function(tnc, aca) {
   return (esm)
 }
 
-random_split <- runif(nrow(claim_data))
-split = rep(0, nrow(claim_data))
-counter = 1
-for (num in random_split) {
-  if (num >= 0.3) split[counter] = 0 else split[counter] = 1
-  counter = counter + 1
-}
-
-# claim_frequency_data = subset(claim_data, select=-c(total_claims_cost, claim_loss_date, accident_month, quarter_in_year, month_in_year, term_start_date, term_expiry_date, policy_id))
+# # Run logistic regression
+# random_split <- runif(nrow(claim_data))
+# split = rep(0, nrow(claim_data))
+# counter = 1
+# for (num in random_split) {
+#   if (num >= 0.3) split[counter] = 0 else split[counter] = 1
+#   counter = counter + 1
+# }
+# 
+# claim_frequency_data = subset(claim_data, select=-c(vehicle_class, risk_state_name, year_of_manufacture, 
+#                                                     risk_postcode, total_claims_cost, claim_loss_date, 
+#                                                     accident_month, quarter_in_year, month_in_year, 
+#                                                     term_start_date, term_expiry_date, policy_id,
+#                                                     FXRTWI, FXRJY, FXREUR, price_index, M1))
 # claim_frequency_train_data <- claim_frequency_data[split==0, ]
 # claim_frequency_test_data <- claim_frequency_data[split==1, ]
 # 
+# (accident_subset <- summary(regsubsets(accident~., claim_frequency_data, nvmax = 7, method = "exhaustive")))
+# par(mfrow = c(2,2))
+# plot(seq(1,7,1), accident_subset$rss, main="Residual Sum of Squares")
+# plot(seq(1,7,1), accident_subset$adjr2, main="Adjusted R^2")
+# plot(seq(1,7,1), accident_subset$cp, main="Cp")
+# plot(seq(1,7,1), accident_subset$bic, main="Bayesian Information Criterion")
+# 
+# # Choose 5 predictors - policy_tenure + sum_insured + exposure + lockdown + car_age
+# 
+# logistic_model <- glm(accident ~ policy_tenure + sum_insured + exposure + lockdown + car_age,
+#                       data = claim_frequency_train_data, family="binomial"(link='logit'))
+# summary(logistic_model)
+# 
+# claim_freq.pred <- predict(logistic_model, claim_frequency_test_data, type = "response")
+# claim_freq.pred <- ifelse(claim_freq.pred > 0.5, 1, 0)
+
 # set.seed(120)
 # bag <- randomForest(accident ~ ., data = claim_frequency_train_data)
 # pred.bag = predict(bag, newdata = claim_frequency_test_data)
